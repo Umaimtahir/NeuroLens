@@ -1,0 +1,34 @@
+{
+  "app_name": "NeuroLens",
+  "tagline": "Mental Well-being Monitor",
+  "login": {
+    "title": "Sign in to continue",
+    "username_hint": "Username",
+    "password_hint": "Password",
+    "sign_in": "Sign In",
+    "need_help": "Need help?"
+  },
+  "dashboard": {
+    "welcome": "Welcome back",
+    "subtitle": "Monitor your mental well-being in real-time",
+    "current_emotion": "Current Emotion",
+    "current_content": "Current Content",
+    "last_session": "Last Session",
+    "status": "Status"
+  },
+  "camera": {
+    "permission_title": "Camera Permission",
+    "permission_message": "Allow NeuroLens to use your CAMERA only — audio will not be recorded.",
+    "permission_denied": "You denied camera access. To use real-time analysis, enable camera from Settings.",
+    "start_recording": "Start Recording",
+    "stop_recording": "Stop Recording",
+    "audio_disabled": "Audio is disabled - Video only"
+  },
+  "settings": {
+    "appearance": "Appearance",
+    "security": "Security",
+    "recording": "Recording",
+    "data_management": "Data Management",
+    "about": "About"
+  }
+}
