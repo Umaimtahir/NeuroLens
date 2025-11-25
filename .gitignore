@@ -1,0 +1,38 @@
+# Python / backend
+venv/
+__pycache__/
+*.pyc
+.env
+.vscode/
+.pytest_cache/
+.mypy_cache/
+
+# Local model files (use Git LFS)
+models/*.h5
+models/*.pt
+models/*.pth
+models/*.pkl
+
+# Android / Gradle
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+android-app/local.properties
+android-app/*.iml
+android-app/.idea/
+android-app/captures/
+android-app/gradle-wrapper.jar
+android-app/*.keystore
+android-app/*.jks
+android-app/keystore.jks
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
