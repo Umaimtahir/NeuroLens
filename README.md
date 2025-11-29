@@ -40,4 +40,3 @@ Android app
 CI / Secrets
 - Add secrets (DATABASE_URL, SECRET_KEY, ENCRYPTION_KEY, Android signing keys) in GitHub repository settings when you create the remote repo.
 
-If you want, I can create an initial commit and push to GitHub for you (requires `gh` CLI and authentication on your machine).
