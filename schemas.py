@@ -100,14 +100,34 @@ class ReportData(BaseModel):
 
 # Password Reset Schemas ONLY
 class ForgotPasswordRequest(BaseModel):
+    username: str = Field(..., min_length=3)
     email: EmailStr
+    
+    @validator('username')
+    def validate_username(cls, v):
+        return v.strip().lower()
+
+
+class VerifyResetCodeRequest(BaseModel):
+    username: str = Field(..., min_length=3)
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6)
+    
+    @validator('username')
+    def validate_username(cls, v):
+        return v.strip().lower()
 
 
 class ResetPasswordRequest(BaseModel):
+    username: str = Field(..., min_length=3)
     email: EmailStr
     code: str = Field(..., min_length=6, max_length=6)
     new_password: str = Field(..., min_length=8, max_length=72)
     confirm_password: str
+    
+    @validator('username')
+    def validate_username(cls, v):
+        return v.strip().lower()
     
     @validator('new_password')
     def validate_password(cls, v):

@@ -11,7 +11,7 @@ from models import User, EmotionLog, AnalysisSession
 from schemas import (
     UserSignup, UserLogin, UserResponse, 
     LoginResponse, SignupResponse, ReportData,
-    ForgotPasswordRequest, ResetPasswordRequest,
+    ForgotPasswordRequest, ResetPasswordRequest, VerifyResetCodeRequest,
     VerifyEmailRequest, ResendVerificationRequest
 )
 from encryption import EncryptionService
@@ -324,16 +324,31 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @app.post("/api/auth/forgot-password")
 def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    """Send password reset code to email"""
+    """Send password reset code to email - validates username and email match"""
     
     email_normalized = request.email.lower().strip()
-    email_hash = EncryptionService.hash_email(email_normalized)
+    username_normalized = request.username.lower().strip()
     
-    user = db.query(User).filter(User.email_hash == email_hash).first()
+    email_hash = EncryptionService.hash_email(email_normalized)
+    username_hash = EncryptionService.hash_username(username_normalized)
+    
+    # Find user by username
+    user = db.query(User).filter(User.username_hash == username_hash).first()
     
     if not user:
-        print(f"⚠️ Password reset requested for non-existent email: {email_normalized}")
-        return {"message": "If this email is registered, a reset code has been sent"}
+        print(f"⚠️ Password reset requested for non-existent username: {username_normalized}")
+        raise HTTPException(
+            status_code=404,
+            detail="Username not found"
+        )
+    
+    # Verify email matches
+    if user.email_hash != email_hash:
+        print(f"⚠️ Email mismatch for username: {username_normalized}")
+        raise HTTPException(
+            status_code=400,
+            detail="Email does not match the registered email for this username"
+        )
     
     reset_code = EmailService.generate_verification_code()
     
@@ -355,8 +370,45 @@ def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db
         print(f"❌ Failed to send email: {e}")
     
     return {
-        "message": "If this email is registered, a reset code has been sent",
-        "email": email_normalized
+        "message": "Reset code sent to your email",
+        "email": email_normalized,
+        "username": username_normalized
+    }
+
+
+@app.post("/api/auth/verify-reset-code")
+def verify_reset_code(request: VerifyResetCodeRequest, db: Session = Depends(get_db)):
+    """Verify the reset code before allowing password reset"""
+    
+    email_normalized = request.email.lower().strip()
+    username_normalized = request.username.lower().strip()
+    
+    email_hash = EncryptionService.hash_email(email_normalized)
+    username_hash = EncryptionService.hash_username(username_normalized)
+    
+    # Find user by username
+    user = db.query(User).filter(User.username_hash == username_hash).first()
+    
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid credentials")
+    
+    # Verify email matches
+    if user.email_hash != email_hash:
+        raise HTTPException(status_code=400, detail="Invalid credentials")
+    
+    # Verify reset code
+    if user.reset_token != request.code:
+        raise HTTPException(status_code=400, detail="Invalid reset code")
+    
+    # Check if code expired
+    if user.reset_token_expiry and user.reset_token_expiry < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Reset code has expired. Please request a new one.")
+    
+    print(f"✅ Reset code verified for {user.name}")
+    
+    return {
+        "message": "Code verified successfully",
+        "verified": True
     }
 
 
@@ -365,33 +417,33 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
     """Reset password using the emailed code"""
     
     email_normalized = request.email.lower().strip()
-    email_hash = EncryptionService.hash_email(email_normalized)
+    username_normalized = request.username.lower().strip()
     
-    print(f"🔐 Password reset attempt for: {email_normalized}")
+    email_hash = EncryptionService.hash_email(email_normalized)
+    username_hash = EncryptionService.hash_username(username_normalized)
+    
+    print(f"🔐 Password reset attempt for: {username_normalized} / {email_normalized}")
     print(f"📝 Code provided: {request.code}")
     
-    user = db.query(User).filter(User.email_hash == email_hash).first()
+    # Find user by username
+    user = db.query(User).filter(User.username_hash == username_hash).first()
     
     if not user:
-        print(f"❌ Invalid email")
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid reset code or email"
-        )
+        print(f"❌ Invalid username")
+        raise HTTPException(status_code=400, detail="Invalid credentials")
+    
+    # Verify email matches
+    if user.email_hash != email_hash:
+        print(f"❌ Email mismatch")
+        raise HTTPException(status_code=400, detail="Invalid credentials")
     
     if user.reset_token != request.code:
         print(f"❌ Invalid reset code")
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid reset code or email"
-        )
+        raise HTTPException(status_code=400, detail="Invalid reset code")
     
     if user.reset_token_expiry and user.reset_token_expiry < datetime.now(timezone.utc):
         print(f"❌ Reset code expired")
-        raise HTTPException(
-            status_code=400,
-            detail="Reset code expired. Please request a new one."
-        )
+        raise HTTPException(status_code=400, detail="Reset code expired. Please request a new one.")
     
     try:
         user.password_hash = EncryptionService.hash_password(request.new_password)
