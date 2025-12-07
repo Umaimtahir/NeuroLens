@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile
+from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -7,7 +7,7 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from database import engine, get_db, Base
-from models import User, EmotionLog, AnalysisSession
+from models import User, EmotionLog, AnalysisSession, AuditLog
 from schemas import (
     UserSignup, UserLogin, UserResponse, 
     LoginResponse, SignupResponse, ReportData,
@@ -31,6 +31,35 @@ pending_signups = {}
 
 # Create tables
 Base.metadata.create_all(bind=engine)
+
+
+def log_audit_event(
+    db: Session,
+    action: str,
+    user_id: int = None,
+    username: str = None,
+    details: str = None,
+    ip_address: str = None,
+    user_agent: str = None,
+    status: str = "success"
+):
+    """Helper function to log audit events"""
+    try:
+        audit_entry = AuditLog(
+            user_id=user_id,
+            username=username,
+            action=action,
+            details=details,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            status=status
+        )
+        db.add(audit_entry)
+        db.commit()
+        print(f"📝 Audit: {action} - {username or 'System'} - {status}")
+    except Exception as e:
+        print(f"⚠️ Audit log error: {e}")
+
 
 app = FastAPI(
     title="NeuroLens API",
@@ -192,6 +221,10 @@ def verify_signup(request: VerifySignupRequest, db: Session = Depends(get_db)):
     
     print(f"✅ User created and verified: ID={new_user.id}, Username={signup_data['username']}")
     
+    # Log signup audit event
+    log_audit_event(db, "SIGNUP_SUCCESS", user_id=new_user.id, username=signup_data["username"],
+                   details=json.dumps({"email": signup_data["email"], "name": signup_data["name"]}))
+    
     # Send welcome email
     try:
         EmailService.send_welcome_email(signup_data["email"], signup_data["name"])
@@ -346,7 +379,7 @@ def resend_verification(request: ResendVerificationRequest, db: Session = Depend
 
 
 @app.post("/api/auth/login", response_model=LoginResponse)
-def login(credentials: UserLogin, db: Session = Depends(get_db)):
+def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db)):
     """Authenticate user"""
     
     username_normalized = credentials.username.lower().strip()
@@ -355,25 +388,42 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username_hash == username_hash).first()
     
     if not user:
+        log_audit_event(db, "LOGIN_FAILED", username=username_normalized, 
+                       details="User not found", status="failed",
+                       ip_address=request.client.host if request.client else None)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     if not EncryptionService.verify_password(credentials.password, user.password_hash):
+        log_audit_event(db, "LOGIN_FAILED", user_id=user.id, username=username_normalized,
+                       details="Invalid password", status="failed",
+                       ip_address=request.client.host if request.client else None)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Check if email is verified
     if not user.email_verified:
+        log_audit_event(db, "LOGIN_FAILED", user_id=user.id, username=username_normalized,
+                       details="Email not verified", status="failed",
+                       ip_address=request.client.host if request.client else None)
         raise HTTPException(
             status_code=403,
             detail="Please verify your email before logging in. Check your inbox."
         )
     
     if not user.is_active:
+        log_audit_event(db, "LOGIN_FAILED", user_id=user.id, username=username_normalized,
+                       details="Account disabled", status="failed",
+                       ip_address=request.client.host if request.client else None)
         raise HTTPException(status_code=403, detail="Account disabled")
     
     token = create_access_token(data={"sub": username_normalized, "verified": True})
     
     username_display = EncryptionService.decrypt_data(user.username_encrypted)
     email_display = EncryptionService.decrypt_data(user.email_encrypted)
+    
+    # Log successful login
+    log_audit_event(db, "LOGIN_SUCCESS", user_id=user.id, username=username_display,
+                   details=json.dumps({"email": email_display}),
+                   ip_address=request.client.host if request.client else None)
     
     return LoginResponse(
         token=token,
@@ -549,16 +599,23 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
         user.reset_token_expiry = None
         db.commit()
         
+        username_display = EncryptionService.decrypt_data(user.username_encrypted)
         print(f"✅ Password reset successful for {user.name}")
+        
+        # Log password reset audit event
+        log_audit_event(db, "PASSWORD_RESET", user_id=user.id, username=username_display,
+                       details=json.dumps({"email": email_normalized}))
         
         return {
             "message": "Password reset successfully",
-            "username": EncryptionService.decrypt_data(user.username_encrypted)
+            "username": username_display
         }
         
     except Exception as e:
         db.rollback()
         print(f"❌ Password reset failed: {e}")
+        log_audit_event(db, "PASSWORD_RESET_FAILED", username=username_normalized,
+                       details=str(e), status="failed")
         raise HTTPException(status_code=500, detail="Password reset failed")
 
 
@@ -953,6 +1010,109 @@ def admin_get_stats(
                 ).count()
             }
             for log in db.query(EmotionLog.username).distinct().limit(10).all()
+        ]
+    }
+
+
+@app.get("/api/admin/audit-logs")
+def admin_get_audit_logs(
+    _: bool = Depends(verify_admin),
+    db: Session = Depends(get_db),
+    action: str = None,
+    status: str = None,
+    limit: int = 100,
+    offset: int = 0
+):
+    """Admin: Get detailed audit logs with filtering"""
+    from sqlalchemy import desc
+    
+    query = db.query(AuditLog)
+    
+    # Apply filters
+    if action:
+        query = query.filter(AuditLog.action == action.upper())
+    if status:
+        query = query.filter(AuditLog.status == status)
+    
+    # Get total count
+    total_count = query.count()
+    
+    # Get paginated results
+    logs = query.order_by(desc(AuditLog.created_at)).offset(offset).limit(limit).all()
+    
+    return {
+        "total": total_count,
+        "limit": limit,
+        "offset": offset,
+        "logs": [
+            {
+                "id": log.id,
+                "user_id": log.user_id,
+                "username": log.username,
+                "action": log.action,
+                "details": json.loads(log.details) if log.details else None,
+                "ip_address": log.ip_address,
+                "status": log.status,
+                "timestamp": log.created_at.isoformat() if log.created_at else None
+            }
+            for log in logs
+        ]
+    }
+
+
+@app.get("/api/admin/audit-logs/summary")
+def admin_get_audit_summary(
+    _: bool = Depends(verify_admin),
+    db: Session = Depends(get_db)
+):
+    """Admin: Get audit log summary statistics"""
+    from sqlalchemy import func
+    from datetime import date, timedelta
+    
+    # Count by action type
+    action_counts = db.query(
+        AuditLog.action,
+        func.count(AuditLog.id).label('count')
+    ).group_by(AuditLog.action).all()
+    
+    # Count by status
+    status_counts = db.query(
+        AuditLog.status,
+        func.count(AuditLog.id).label('count')
+    ).group_by(AuditLog.status).all()
+    
+    # Activity by day (last 7 days)
+    today = date.today()
+    daily_activity = []
+    for i in range(7):
+        day = today - timedelta(days=i)
+        count = db.query(AuditLog).filter(
+            func.date(AuditLog.created_at) == day
+        ).count()
+        daily_activity.append({
+            "date": day.isoformat(),
+            "count": count
+        })
+    
+    # Recent failed actions
+    failed_actions = db.query(AuditLog).filter(
+        AuditLog.status == "failed"
+    ).order_by(AuditLog.created_at.desc()).limit(10).all()
+    
+    return {
+        "total_events": db.query(AuditLog).count(),
+        "action_breakdown": {a: c for a, c in action_counts},
+        "status_breakdown": {s: c for s, c in status_counts},
+        "daily_activity": daily_activity,
+        "recent_failures": [
+            {
+                "id": log.id,
+                "username": log.username,
+                "action": log.action,
+                "details": json.loads(log.details) if log.details else None,
+                "timestamp": log.created_at.isoformat() if log.created_at else None
+            }
+            for log in failed_actions
         ]
     }
 

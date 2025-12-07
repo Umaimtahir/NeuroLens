@@ -61,3 +61,18 @@ class AnalysisSession(Base):
     duration_seconds = Column(Integer)
     is_guest = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuditLog(Base):
+    """Store all system audit events for admin review"""
+    __tablename__ = "audit_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=True, index=True)  # Null for system events
+    username = Column(String(255), nullable=True)
+    action = Column(String(100), nullable=False, index=True)  # e.g., 'LOGIN', 'LOGOUT', 'SIGNUP', etc.
+    details = Column(Text, nullable=True)  # JSON string with additional details
+    ip_address = Column(String(50), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+    status = Column(String(20), default='success')  # 'success', 'failed', 'pending'
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
