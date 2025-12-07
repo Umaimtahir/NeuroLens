@@ -14,6 +14,7 @@ import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/camera_provider.dart';
 import 'providers/analysis_provider.dart';
+import 'providers/settings_provider.dart';
 import 'utils/theme.dart';
 
 void main() {
@@ -32,6 +33,7 @@ class NeuroLensApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => CameraProvider()),
         ChangeNotifierProvider(create: (_) => AnalysisProvider()),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {

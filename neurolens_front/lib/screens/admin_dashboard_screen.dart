@@ -13,6 +13,7 @@ class AdminDashboardScreen extends StatefulWidget {
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Map<String, dynamic>? _stats;
   Map<String, dynamic>? _audit;
+  Map<String, dynamic>? _activeUsers;
   bool _isLoading = true;
   final String _adminApiKey = "neurolens-admin-key-2025"; // Matches backend
 
@@ -41,10 +42,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         headers: headers,
       );
 
+      final activeUsersResponse = await http.get(
+        Uri.parse('${AppConstants.baseUrl}/api/admin/active-users'),
+        headers: headers,
+      );
+
       if (statsResponse.statusCode == 200 && auditResponse.statusCode == 200) {
         setState(() {
           _stats = jsonDecode(statsResponse.body);
           _audit = jsonDecode(auditResponse.body);
+          if (activeUsersResponse.statusCode == 200) {
+            _activeUsers = jsonDecode(activeUsersResponse.body);
+          }
           _isLoading = false;
         });
       }
@@ -154,6 +163,127 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
             const SizedBox(height: 32),
 
+            // Currently Active Users Section
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Currently Active Users',
+                  style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                    fontSize: 20,
+                  ),
+                ),
+                if (_activeUsers != null)
+                  Chip(
+                    label: Text('${_activeUsers!['active_count']} online'),
+                    backgroundColor: Colors.green.withOpacity(0.2),
+                    avatar: const Icon(Icons.circle, color: Colors.green, size: 12),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            if (_activeUsers != null && _activeUsers!['users'] != null)
+              _activeUsers!['users'].isEmpty
+                  ? Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.person_off, size: 48, color: Colors.grey[400]),
+                              const SizedBox(height: 8),
+                              Text(
+                                'No users currently active',
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  : Card(
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: (_activeUsers!['users'] as List).length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final user = _activeUsers!['users'][index];
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: _getEmotionColor(user['current_emotion']),
+                              child: Text(
+                                user['name']?.substring(0, 1).toUpperCase() ?? '?',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            title: Text(user['name'] ?? 'Unknown'),
+                            subtitle: Text('@${user['username'] ?? 'unknown'}'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _getEmotionIcon(user['current_emotion'] ?? 'neutral'),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          (user['current_emotion'] ?? 'N/A').toUpperCase(),
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: _getEmotionColor(user['current_emotion']),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    Text(
+                                      'Intensity: ${((user['current_emotion_intensity'] ?? 0) * 100).toInt()}%',
+                                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(width: 12),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: user['status'] == 'Recording' 
+                                        ? Colors.green.withOpacity(0.2)
+                                        : Colors.grey.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        user['status'] == 'Recording' ? Icons.fiber_manual_record : Icons.pause,
+                                        size: 12,
+                                        color: user['status'] == 'Recording' ? Colors.green : Colors.grey,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        user['status'] ?? 'Idle',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: user['status'] == 'Recording' ? Colors.green : Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+
+            const SizedBox(height: 32),
+
             Row(
               children: [
                 Expanded(
@@ -224,6 +354,32 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
+  Color _getEmotionColor(String? emotion) {
+    if (emotion == null) return Colors.grey;
+    switch (emotion.toLowerCase()) {
+      case 'happy':
+        return Colors.green;
+      case 'sad':
+        return Colors.blue;
+      case 'angry':
+        return Colors.red;
+      case 'stressed':
+        return Colors.orange;
+      case 'focused':
+        return Colors.purple;
+      case 'fear':
+      case 'fearful':
+        return Colors.deepPurple;
+      case 'surprise':
+      case 'surprised':
+        return Colors.amber;
+      case 'disgust':
+        return Colors.brown;
+      default:
+        return Colors.grey;
+    }
+  }
+
   Future<void> _exportDataset() async {
     // Implementation for dataset export
     ScaffoldMessenger.of(context).showSnackBar(
@@ -232,9 +388,128 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   Future<void> _viewUsers() async {
-    // Implementation for viewing users
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('User management feature coming soon!')),
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
     );
+
+    try {
+      final response = await http.get(
+        Uri.parse('${AppConstants.baseUrl}/api/admin/users'),
+        headers: {
+          'X-API-Key': _adminApiKey,
+          'Content-Type': 'application/json',
+        },
+      );
+
+      Navigator.pop(context); // Close loading dialog
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final users = data['users'] as List;
+
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('All Users'),
+                Chip(
+                  label: Text('${data['total']} total'),
+                  backgroundColor: AppConstants.primaryTeal.withOpacity(0.2),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 400,
+              child: users.isEmpty
+                  ? const Center(child: Text('No users found'))
+                  : ListView.separated(
+                      itemCount: users.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final user = users[index];
+                        final isActive = user['is_active'] == true;
+                        final isVerified = user['email_verified'] == true;
+                        
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: isActive ? AppConstants.primaryTeal : Colors.grey,
+                            child: Text(
+                              (user['name'] ?? '?').substring(0, 1).toUpperCase(),
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Text(user['name'] ?? 'Unknown'),
+                              const SizedBox(width: 8),
+                              if (isVerified)
+                                const Icon(Icons.verified, color: Colors.blue, size: 16),
+                            ],
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('@${user['username'] ?? 'unknown'}'),
+                              Text(
+                                user['email'] ?? '',
+                                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                          trailing: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isActive ? Colors.green.withOpacity(0.2) : Colors.red.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  isActive ? 'Active' : 'Inactive',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: isActive ? Colors.green : Colors.red,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'ID: ${user['id']}',
+                                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                              ),
+                            ],
+                          ),
+                          isThreeLine: true,
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load users: ${response.statusCode}')),
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context); // Close loading dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading users: $e')),
+      );
+    }
   }
 }

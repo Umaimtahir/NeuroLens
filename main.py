@@ -685,6 +685,42 @@ def admin_get_audit(
             ]
         }
     }
+
+
+@app.get("/api/admin/active-users")
+def admin_get_active_users(
+    _: bool = Depends(verify_admin),
+    db: Session = Depends(get_db)
+):
+    """Admin: Get currently active users with their real-time emotions"""
+    from datetime import timedelta
+    
+    # Users active in the last 5 minutes are considered "currently using"
+    cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=5)
+    
+    active_users = db.query(User).filter(
+        User.last_activity != None,
+        User.last_activity >= cutoff_time
+    ).all()
+    
+    return {
+        "active_count": len(active_users),
+        "users": [
+            {
+                "id": u.id,
+                "name": u.name,
+                "username": EncryptionService.decrypt_data(u.username_encrypted),
+                "current_emotion": u.current_emotion or "N/A",
+                "current_emotion_intensity": u.current_emotion_intensity or 0,
+                "current_content": u.current_content or "N/A",
+                "last_activity": u.last_activity.isoformat() if u.last_activity else None,
+                "status": "Recording" if (datetime.now(timezone.utc) - u.last_activity).total_seconds() < 60 else "Idle"
+            }
+            for u in active_users
+        ]
+    }
+
+
 @app.get("/api/dashboard/status")
 def get_dashboard_status(
     current_user: User = Depends(get_current_user),

@@ -15,8 +15,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController(text: 'admin');
-  final _passwordController = TextEditingController(text: 'admin');
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
 
@@ -58,7 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Invalid credentials. Use admin/admin'),
+          content: Text('Invalid username or password'),
           backgroundColor: AppConstants.errorRed,
         ),
       );
@@ -184,14 +184,35 @@ class _LoginScreenState extends State<LoginScreen> {
                           showDialog(
                             context: context,
                             builder: (context) => AlertDialog(
-                              title: const Text('Demo Credentials'),
-                              content: const Text(
-                                'Username: admin\nPassword: admin',
+                              title: const Text('How to Use NeuroLens'),
+                              content: const SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('📱 Getting Started:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    SizedBox(height: 8),
+                                    Text('1. Sign up with your email and create an account'),
+                                    Text('2. Verify your email with the code sent to you'),
+                                    Text('3. Log in with your credentials'),
+                                    SizedBox(height: 12),
+                                    Text('🎯 Features:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    SizedBox(height: 8),
+                                    Text('• Real-time emotion detection using your camera'),
+                                    Text('• Track your emotional patterns over time'),
+                                    Text('• View weekly stress and focus reports'),
+                                    Text('• Get personalized recommendations'),
+                                    SizedBox(height: 12),
+                                    Text('👤 Guest Mode:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    SizedBox(height: 8),
+                                    Text('Try the app without signing up by using "Continue as Guest" option.'),
+                                  ],
+                                ),
                               ),
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.pop(context),
-                                  child: const Text('OK'),
+                                  child: const Text('Got it!'),
                                 ),
                               ],
                             ),

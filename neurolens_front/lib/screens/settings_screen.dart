@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/settings_provider.dart';
 import '../services/storage_service.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/confirmation_dialog.dart';
@@ -14,13 +15,12 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _encryptionEnabled = false;
-  bool _demoAutoStop = false;
   final StorageService _storageService = StorageService();
 
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context);
 
     return AppShell(
       currentRoute: 'Settings',
@@ -59,41 +59,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 24),
 
-            // Security
-            Text(
-              'Security',
-              style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                fontSize: 18,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Column(
-                children: [
-                  SwitchListTile(
-                    title: const Text('AES-256 Encryption'),
-                    subtitle: const Text('Encrypt local data'),
-                    value: _encryptionEnabled,
-                    onChanged: (value) {
-                      setState(() => _encryptionEnabled = value);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            value
-                                ? 'Encryption enabled - data will be encrypted'
-                                : 'Encryption disabled',
-                          ),
-                        ),
-                      );
-                    },
-                    activeColor: AppConstants.primaryTeal,
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
             // Recording
             Text(
               'Recording',
@@ -106,11 +71,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 children: [
                   SwitchListTile(
-                    title: const Text('Demo Auto Stop'),
-                    subtitle: Text('Auto-stop recording after ${AppConstants.demoAutoStopSeconds} seconds'),
-                    value: _demoAutoStop,
+                    title: const Text('Auto Stop Recording'),
+                    subtitle: Text('Automatically stop after ${settingsProvider.autoStopSeconds} seconds'),
+                    value: settingsProvider.autoStopEnabled,
                     onChanged: (value) {
-                      setState(() => _demoAutoStop = value);
+                      settingsProvider.setAutoStopEnabled(value);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            value
+                                ? 'Auto-stop enabled (${settingsProvider.autoStopSeconds}s)'
+                                : 'Auto-stop disabled',
+                          ),
+                          backgroundColor: AppConstants.primaryTeal,
+                        ),
+                      );
                     },
                     activeColor: AppConstants.primaryTeal,
                   ),
@@ -232,19 +207,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const Divider(height: 1),
                   ListTile(
                     title: const Text('Keyboard Shortcuts'),
+                    subtitle: const Text('View available shortcuts'),
                     trailing: const Icon(Icons.keyboard),
                     onTap: () {
                       showDialog(
                         context: context,
                         builder: (context) => AlertDialog(
                           title: const Text('Keyboard Shortcuts'),
-                          content: const Column(
+                          content: Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Ctrl + R: Start/Stop Recording'),
-                              SizedBox(height: 8),
-                              Text('Ctrl + L: Open Camera'),
+                              _buildShortcutRow('Ctrl + R', 'Start/Stop Recording'),
+                              const SizedBox(height: 12),
+                              _buildShortcutRow('Ctrl + L', 'Open Camera'),
+                              const SizedBox(height: 16),
+                              const Text(
+                                'Note: Shortcuts work when the app has focus.',
+                                style: TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
                             ],
                           ),
                           actions: [
@@ -263,6 +244,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildShortcutRow(String shortcut, String description) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppConstants.primaryTeal.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            shortcut,
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Text(description),
+      ],
     );
   }
 }

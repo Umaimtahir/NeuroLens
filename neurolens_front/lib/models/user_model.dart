@@ -2,12 +2,14 @@ class UserModel {
   final int id;
   final String name;
   final String email;
+  final String? username;
   final String? token;
 
   UserModel({
     required this.id,
     required this.name,
     required this.email,
+    this.username,
     this.token,
   });
 
@@ -16,6 +18,7 @@ class UserModel {
       id: json['id'] as int,
       name: json['name'] as String,
       email: json['email'] as String,
+      username: json['username'] as String?,
       token: json['token'] as String?,
     );
   }
@@ -25,6 +28,7 @@ class UserModel {
       'id': id,
       'name': name,
       'email': email,
+      'username': username,
       'token': token,
     };
   }
@@ -34,7 +38,10 @@ class UserModel {
       id: id,
       name: name,
       email: email,
+      username: username,
       token: token ?? this.token,
     );
   }
+
+  bool get isAdmin => username?.toLowerCase() == 'admin';
 }

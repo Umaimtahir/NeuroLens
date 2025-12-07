@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/app_shell.dart';
 import '../utils/constants.dart';
+import 'admin_dashboard_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -57,12 +59,35 @@ class ProfileScreen extends StatelessWidget {
                     const Divider(),
                     const SizedBox(height: 16),
                     _buildInfoRow(context, 'User ID', user?.id.toString() ?? 'N/A'),
-                    _buildInfoRow(context, 'Account Type', 'Demo Account'),
-                    _buildInfoRow(context, 'Member Since', 'November 2025'),
+                    _buildInfoRow(context, 'Account Type', user?.isAdmin == true ? 'Admin Account' : 'Standard Account'),
+                    _buildInfoRow(context, 'Username', '@${user?.username ?? 'N/A'}'),
                   ],
                 ),
               ),
             ),
+
+            // Admin Dashboard Button (only for admin users)
+            if (user?.isAdmin == true) ...[
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.admin_panel_settings),
+                  label: const Text('Admin Dashboard'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.deepPurple,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+            ],
 
             const SizedBox(height: 24),
 
