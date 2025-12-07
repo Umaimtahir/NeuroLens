@@ -12,7 +12,8 @@ from schemas import (
     UserSignup, UserLogin, UserResponse, 
     LoginResponse, SignupResponse, ReportData,
     ForgotPasswordRequest, ResetPasswordRequest, VerifyResetCodeRequest,
-    VerifyEmailRequest, ResendVerificationRequest
+    VerifyEmailRequest, ResendVerificationRequest,
+    InitiateSignupResponse, VerifySignupRequest
 )
 from encryption import EncryptionService
 from auth import create_access_token, get_current_user
@@ -23,6 +24,10 @@ from terms_and_conditions import TERMS_AND_CONDITIONS, PRIVACY_POLICY
 from fastapi import Header
 
 logger = logging.getLogger(__name__)
+
+# Temporary storage for pending signups (email verification before account creation)
+# Format: {email_hash: {"data": {...}, "code": "123456", "expiry": datetime}}
+pending_signups = {}
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -53,14 +58,14 @@ def root():
     }
 
 
-@app.post("/api/auth/signup", response_model=SignupResponse, status_code=201)
+@app.post("/api/auth/signup", response_model=InitiateSignupResponse, status_code=200)
 def signup(user_data: UserSignup, db: Session = Depends(get_db)):
-    """Create new user - Requires email verification"""
+    """Initiate signup - Sends verification code to email BEFORE creating account"""
     
     email_normalized = user_data.email.lower().strip()
     username_normalized = user_data.username.lower().strip()
     
-    print(f"📝 Signup attempt:")
+    print(f"📝 Signup initiation attempt:")
     print(f"   Name: {user_data.name}")
     print(f"   Email: {email_normalized}")
     print(f"   Username: {username_normalized}")
@@ -68,15 +73,6 @@ def signup(user_data: UserSignup, db: Session = Depends(get_db)):
     # Hash for lookup
     username_hash = EncryptionService.hash_username(username_normalized)
     email_hash = EncryptionService.hash_email(email_normalized)
-    
-    try:
-        # Encrypt for storage/display
-        encrypted_email = EncryptionService.encrypt_data(email_normalized)
-        encrypted_username = EncryptionService.encrypt_data(username_normalized)
-        print(f"✅ Data encrypted successfully")
-    except Exception as e:
-        print(f"❌ Encryption failed: {e}")
-        raise HTTPException(status_code=500, detail="Encryption error")
     
     # Check existing user by hash (deterministic lookup)
     existing = db.query(User).filter(User.username_hash == username_hash).first()
@@ -87,34 +83,23 @@ def signup(user_data: UserSignup, db: Session = Depends(get_db)):
     if existing_email:
         raise HTTPException(status_code=400, detail="Email already registered")
     
-    try:
-        password_hash = EncryptionService.hash_password(user_data.password)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Password hashing error")
-    
     # Generate verification code
     verification_code = EmailService.generate_verification_code()
     
-    # Create user
-    new_user = User(
-        name=user_data.name.strip(),
-        email_encrypted=encrypted_email,
-        email_hash=email_hash,
-        username_hash=username_hash,
-        username_encrypted=encrypted_username,
-        password_hash=password_hash,
-        email_verified=False,
-        verification_code=verification_code,
-        verification_code_expiry=datetime.now(timezone.utc) + timedelta(minutes=10),
-        is_active=False
-    )
+    # Store pending signup data (will create account after email verification)
+    pending_signups[email_hash] = {
+        "data": {
+            "name": user_data.name.strip(),
+            "email": email_normalized,
+            "username": username_normalized,
+            "password": user_data.password  # Will be hashed when account is created
+        },
+        "code": verification_code,
+        "expiry": datetime.now(timezone.utc) + timedelta(minutes=10)
+    }
     
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    print(f"✅ User created: ID={new_user.id}, Username={username_normalized}")
     print(f"📧 Verification code: {verification_code}")
+    print(f"⏳ Pending signup stored for: {email_normalized}")
     
     # Send verification email
     try:
@@ -127,24 +112,137 @@ def signup(user_data: UserSignup, db: Session = Depends(get_db)):
         if success:
             print(f"✅ Verification email sent to {email_normalized}")
         else:
-            print(f"⚠️ Failed to send verification email")
+            print(f"⚠️ Failed to send verification email (check email settings)")
             
     except Exception as e:
         print(f"❌ Email sending error: {e}")
     
-    # Generate temporary token (limited access until verified)
-    token = create_access_token(data={"sub": username_normalized, "verified": False})
+    return InitiateSignupResponse(
+        message="Verification code sent to your email. Please verify to complete signup.",
+        email=email_normalized
+    )
+
+
+@app.post("/api/auth/verify-signup", response_model=SignupResponse, status_code=201)
+def verify_signup(request: VerifySignupRequest, db: Session = Depends(get_db)):
+    """Verify email code and create account"""
+    
+    email_normalized = request.email.lower().strip()
+    code_normalized = request.code.strip()
+    
+    print(f"📧 Signup verification attempt for: {email_normalized}")
+    print(f"📝 Code provided: '{code_normalized}'")
+    
+    # Get email hash for lookup
+    email_hash = EncryptionService.hash_email(email_normalized)
+    
+    # Check if there's a pending signup for this email
+    pending = pending_signups.get(email_hash)
+    
+    if not pending:
+        print(f"❌ No pending signup found for: {email_normalized}")
+        raise HTTPException(status_code=400, detail="No pending signup found. Please start signup again.")
+    
+    # Check if code has expired
+    if pending["expiry"] < datetime.now(timezone.utc):
+        # Clean up expired entry
+        del pending_signups[email_hash]
+        print(f"❌ Verification code expired for: {email_normalized}")
+        raise HTTPException(status_code=400, detail="Verification code expired. Please start signup again.")
+    
+    # Verify code
+    if pending["code"] != code_normalized:
+        print(f"❌ Invalid code: expected '{pending['code']}', got '{code_normalized}'")
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+    
+    # Code is valid - now create the account
+    signup_data = pending["data"]
+    
+    try:
+        # Encrypt for storage
+        encrypted_email = EncryptionService.encrypt_data(signup_data["email"])
+        encrypted_username = EncryptionService.encrypt_data(signup_data["username"])
+        password_hash = EncryptionService.hash_password(signup_data["password"])
+        username_hash = EncryptionService.hash_username(signup_data["username"])
+        print(f"✅ Data encrypted successfully")
+    except Exception as e:
+        print(f"❌ Encryption failed: {e}")
+        raise HTTPException(status_code=500, detail="Encryption error")
+    
+    # Create user (already verified)
+    new_user = User(
+        name=signup_data["name"],
+        email_encrypted=encrypted_email,
+        email_hash=email_hash,
+        username_hash=username_hash,
+        username_encrypted=encrypted_username,
+        password_hash=password_hash,
+        email_verified=True,  # Already verified!
+        verification_code=None,
+        verification_code_expiry=None,
+        is_active=True  # Account is active immediately
+    )
+    
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    
+    # Clean up pending signup
+    del pending_signups[email_hash]
+    
+    print(f"✅ User created and verified: ID={new_user.id}, Username={signup_data['username']}")
+    
+    # Send welcome email
+    try:
+        EmailService.send_welcome_email(signup_data["email"], signup_data["name"])
+    except Exception as e:
+        print(f"⚠️ Welcome email failed: {e}")
+    
+    # Generate token (fully verified)
+    token = create_access_token(data={"sub": signup_data["username"], "verified": True})
     
     return SignupResponse(
         token=token,
         user=UserResponse(
             id=new_user.id,
             name=new_user.name,
-            email=email_normalized,
-            username=username_normalized
+            email=signup_data["email"],
+            username=signup_data["username"]
         ),
-        message="Account created! Please check your email for verification code."
+        message="Account created and verified successfully!"
     )
+
+
+@app.post("/api/auth/resend-signup-code")
+def resend_signup_code(email: str, db: Session = Depends(get_db)):
+    """Resend verification code for pending signup"""
+    
+    email_normalized = email.lower().strip()
+    email_hash = EncryptionService.hash_email(email_normalized)
+    
+    pending = pending_signups.get(email_hash)
+    
+    if not pending:
+        raise HTTPException(status_code=400, detail="No pending signup found. Please start signup again.")
+    
+    # Generate new code
+    new_code = EmailService.generate_verification_code()
+    pending["code"] = new_code
+    pending["expiry"] = datetime.now(timezone.utc) + timedelta(minutes=10)
+    
+    print(f"📧 New verification code: {new_code}")
+    
+    # Send email
+    try:
+        EmailService.send_verification_email(
+            to_email=email_normalized,
+            verification_code=new_code,
+            username=pending["data"]["name"]
+        )
+    except Exception as e:
+        print(f"❌ Email sending error: {e}")
+    
+    return {"message": "Verification code resent to your email"}
 
 
 @app.post("/api/auth/verify-email")

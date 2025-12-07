@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:camera/camera.dart';
-import 'dart:async';
 
 import '../providers/camera_provider.dart';
 import '../providers/analysis_provider.dart';
-import '../providers/settings_provider.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/recording_control.dart';
 import '../utils/constants.dart';
@@ -23,8 +20,6 @@ class _CameraScreenState extends State<CameraScreen>
     with WidgetsBindingObserver {
   bool _permissionRequested = false;
   bool _permissionDenied = false;
-  Timer? _autoStopTimer;
-  final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
@@ -33,7 +28,6 @@ class _CameraScreenState extends State<CameraScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeCamera();
-      _focusNode.requestFocus();
     });
   }
 
@@ -103,21 +97,17 @@ class _CameraScreenState extends State<CameraScreen>
 
   @override
   Widget build(BuildContext context) {
-    return RawKeyboardListener(
-      focusNode: _focusNode,
-      onKey: _handleKeyEvent,
-      child: WillPopScope(
-        onWillPop: () async {
-          final cameraProvider = Provider.of<CameraProvider>(context, listen: false);
-          final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
+    return WillPopScope(
+      onWillPop: () async {
+        final cameraProvider = Provider.of<CameraProvider>(context, listen: false);
+        final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
 
-          _autoStopTimer?.cancel();
-          cameraProvider.pauseCamera();
-          analysisProvider.stopAnalysis();
+        cameraProvider.pauseCamera();
+        analysisProvider.stopAnalysis();
 
-          return true;
-        },
-        child: AppShell(
+        return true;
+      },
+      child: AppShell(
           currentRoute: 'Camera',
           body: Consumer2<CameraProvider, AnalysisProvider>(
             builder: (context, cameraProvider, analysisProvider, _) {
@@ -214,8 +204,8 @@ class _CameraScreenState extends State<CameraScreen>
                     RecordingControl(
                       isRecording: cameraProvider.isRecording,
                       duration: cameraProvider.recordingDuration,
-                      onStartRecording: () => _startRecordingWithAutoStop(),
-                      onStopRecording: () => _stopRecordingWithAutoStop(),
+                      onStartRecording: () => _startRecording(),
+                      onStopRecording: () => _stopRecording(),
                     ),
                   ],
                 ),
@@ -355,7 +345,6 @@ class _CameraScreenState extends State<CameraScreen>
             );
           },
         ),
-        ),
       ),
     );
   }
@@ -383,8 +372,6 @@ class _CameraScreenState extends State<CameraScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _autoStopTimer?.cancel();
-    _focusNode.dispose();
 
     final cameraProvider = Provider.of<CameraProvider>(context, listen: false);
     final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
@@ -395,54 +382,18 @@ class _CameraScreenState extends State<CameraScreen>
     super.dispose();
   }
 
-  void _handleKeyEvent(RawKeyEvent event) {
-    if (event is! RawKeyDownEvent) return;
-    
+  void _startRecording() async {
     final cameraProvider = Provider.of<CameraProvider>(context, listen: false);
     final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
-
-    // Ctrl+R: Start/Stop Recording
-    if (event.isControlPressed && event.logicalKey == LogicalKeyboardKey.keyR) {
-      if (cameraProvider.isRecording) {
-        _stopRecordingWithAutoStop();
-      } else {
-        _startRecordingWithAutoStop();
-      }
-    }
-  }
-
-  void _startRecordingWithAutoStop() async {
-    final cameraProvider = Provider.of<CameraProvider>(context, listen: false);
-    final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
-    final settingsProvider = Provider.of<SettingsProvider>(context, listen: false);
 
     await cameraProvider.startRecording();
     analysisProvider.startAnalysis(sharedCamera: cameraProvider.controller);
-
-    // Auto-stop if enabled
-    if (settingsProvider.autoStopEnabled) {
-      _autoStopTimer?.cancel();
-      _autoStopTimer = Timer(Duration(seconds: settingsProvider.autoStopSeconds), () {
-        if (cameraProvider.isRecording) {
-          _stopRecordingWithAutoStop();
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Recording auto-stopped after ${settingsProvider.autoStopSeconds} seconds'),
-                backgroundColor: AppConstants.primaryTeal,
-              ),
-            );
-          }
-        }
-      });
-    }
   }
 
-  void _stopRecordingWithAutoStop() async {
+  void _stopRecording() async {
     final cameraProvider = Provider.of<CameraProvider>(context, listen: false);
     final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
 
-    _autoStopTimer?.cancel();
     final path = await cameraProvider.stopRecording();
     analysisProvider.stopAnalysis();
 

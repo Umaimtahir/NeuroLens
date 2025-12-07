@@ -70,26 +70,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Card(
               child: Column(
                 children: [
-                  SwitchListTile(
-                    title: const Text('Auto Stop Recording'),
-                    subtitle: Text('Automatically stop after ${settingsProvider.autoStopSeconds} seconds'),
-                    value: settingsProvider.autoStopEnabled,
-                    onChanged: (value) {
-                      settingsProvider.setAutoStopEnabled(value);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            value
-                                ? 'Auto-stop enabled (${settingsProvider.autoStopSeconds}s)'
-                                : 'Auto-stop disabled',
-                          ),
-                          backgroundColor: AppConstants.primaryTeal,
-                        ),
-                      );
-                    },
-                    activeColor: AppConstants.primaryTeal,
-                  ),
-                  const Divider(height: 1),
                   ListTile(
                     title: const Text('Storage Location'),
                     subtitle: const Text('View recordings folder'),
@@ -204,69 +184,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     title: const Text('Version'),
                     subtitle: const Text('1.0.0+1'),
                   ),
-                  const Divider(height: 1),
-                  ListTile(
-                    title: const Text('Keyboard Shortcuts'),
-                    subtitle: const Text('View available shortcuts'),
-                    trailing: const Icon(Icons.keyboard),
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Keyboard Shortcuts'),
-                          content: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildShortcutRow('Ctrl + R', 'Start/Stop Recording'),
-                              const SizedBox(height: 12),
-                              _buildShortcutRow('Ctrl + L', 'Open Camera'),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'Note: Shortcuts work when the app has focus.',
-                                style: TextStyle(fontSize: 12, color: Colors.grey),
-                              ),
-                            ],
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(context),
-                              child: const Text('OK'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
                 ],
               ),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildShortcutRow(String shortcut, String description) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppConstants.primaryTeal.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            shortcut,
-            style: const TextStyle(
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Text(description),
-      ],
     );
   }
 }

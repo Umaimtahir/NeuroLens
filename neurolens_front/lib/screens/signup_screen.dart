@@ -62,6 +62,14 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _isLoading = false);
 
     if (success && mounted) {
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Verification code sent! Please check your email.'),
+          backgroundColor: AppConstants.primaryTeal,
+        ),
+      );
+      
       // Navigate to email verification screen
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -74,7 +82,7 @@ class _SignupScreenState extends State<SignupScreen> {
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Signup failed. Username or email may already exist.'),
+          content: Text('Signup failed. Username or email may already exist, or email is invalid.'),
           backgroundColor: AppConstants.errorRed,
         ),
       );

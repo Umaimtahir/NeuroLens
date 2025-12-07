@@ -36,7 +36,7 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  /// Signup
+  /// Signup - Initiates signup (sends verification code, doesn't create account yet)
   Future<bool> signup({
     required String name,
     required String email,
@@ -45,12 +45,31 @@ class AuthProvider with ChangeNotifier {
     required String confirmPassword,
   }) async {
     try {
-      final response = await _apiService.signup(
+      // This now only initiates signup and sends verification code
+      // Account is created after email verification
+      await _apiService.signup(
         name: name,
         email: email,
         username: username,
         password: password,
         confirmPassword: confirmPassword,
+      );
+
+      // Success means verification code was sent
+      // User needs to verify email before account is created
+      return true;
+    } catch (e) {
+      print('Signup error: $e');
+      return false;
+    }
+  }
+
+  /// Complete signup after email verification
+  Future<bool> completeSignup(String email, String code) async {
+    try {
+      final response = await _apiService.verifySignup(
+        email: email,
+        code: code,
       );
 
       final user = UserModel.fromJson(response['user']);
@@ -66,7 +85,7 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
-      print('Signup error: $e');
+      print('Complete signup error: $e');
       return false;
     }
   }
@@ -83,19 +102,21 @@ class AuthProvider with ChangeNotifier {
   Future<void> checkAuthStatus() async {
     final token = await _secureStorage.read(key: AppConstants.tokenKey);
     if (token != null && token.isNotEmpty) {
-      _isAuthenticated = true;
       _apiService.setToken(token);
-
-      // In production, fetch user data from API using token
-      // For now, use stored token
-      _user = UserModel(
-        id: 1,
-        name: 'User',
-        email: 'user@example.com',
-        token: token,
-      );
-
-      print('✅ User authenticated with token: ${token.substring(0, 10)}...');
+      
+      // Try to fetch user data from API
+      try {
+        final userData = await _apiService.getCurrentUser();
+        _user = UserModel.fromJson(userData).copyWith(token: token);
+        _isAuthenticated = true;
+        print('✅ User authenticated: ${_user?.name} (@${_user?.username})');
+      } catch (e) {
+        print('⚠️ Failed to fetch user data: $e');
+        // Token might be expired, clear it
+        await _secureStorage.delete(key: AppConstants.tokenKey);
+        _isAuthenticated = false;
+        _user = null;
+      }
     } else {
       print('❌ No authentication token found');
       _isAuthenticated = false;
@@ -124,10 +145,23 @@ class AuthProvider with ChangeNotifier {
       return false;
     }
   }
-  /// Store verified token
-  Future<void> storeVerifiedToken(String token) async {
+  /// Store verified token and user data after signup/verification
+  Future<void> storeVerifiedToken(String token, {Map<String, dynamic>? userData}) async {
     await _secureStorage.write(key: AppConstants.tokenKey, value: token);
     _apiService.setToken(token);
+    
+    if (userData != null) {
+      _user = UserModel.fromJson(userData).copyWith(token: token);
+    } else {
+      // Fetch user data from API if not provided
+      try {
+        final data = await _apiService.getCurrentUser();
+        _user = UserModel.fromJson(data).copyWith(token: token);
+      } catch (e) {
+        print('⚠️ Failed to fetch user data: $e');
+      }
+    }
+    
     _isAuthenticated = true;
     notifyListeners();
   }

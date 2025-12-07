@@ -60,7 +60,18 @@ class ApiService {
         throw Exception(error['detail'] ?? 'Request failed');
       }
     } catch (e) {
-      print('❌ GET error: $e');
+      print('❌ GET request error: $e');
+      rethrow;
+    }
+  }
+
+  /// Get current user profile
+  Future<Map<String, dynamic>> getCurrentUser() async {
+    try {
+      print('👤 Fetching current user...');
+      return await get('/api/auth/me');
+    } catch (e) {
+      print('❌ Get current user error: $e');
       rethrow;
     }
   }
@@ -96,7 +107,7 @@ class ApiService {
     }
   }
 
-  /// Signup
+  /// Signup - Initiates signup and sends verification code
   Future<Map<String, dynamic>> signup({
     required String name,
     required String email,
@@ -105,7 +116,7 @@ class ApiService {
     required String confirmPassword,
   }) async {
     try {
-      print('📝 Signing up: $username');
+      print('📝 Initiating signup: $username');
       print('📡 API URL: $baseUrl/api/auth/signup');
 
       final response = await http.post(
@@ -133,6 +144,55 @@ class ApiService {
     } catch (e) {
       print('❌ Signup error: $e');
       rethrow;
+    }
+  }
+
+  /// Verify signup - Completes signup after email verification
+  Future<Map<String, dynamic>> verifySignup({
+    required String email,
+    required String code,
+  }) async {
+    try {
+      print('📧 Verifying signup for: $email');
+      print('📡 API URL: $baseUrl/api/auth/verify-signup');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/verify-signup'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email.toLowerCase().trim(),
+          'code': code.trim(),
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data;
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['detail'] ?? 'Verification failed');
+      }
+    } catch (e) {
+      print('❌ Verify signup error: $e');
+      rethrow;
+    }
+  }
+
+  /// Resend signup verification code
+  Future<bool> resendSignupCode(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/resend-signup-code?email=${Uri.encodeComponent(email.toLowerCase().trim())}'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('❌ Resend code error: $e');
+      return false;
     }
   }
 

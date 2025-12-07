@@ -39,8 +39,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // Use verify-signup endpoint to complete account creation
       final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/api/auth/verify-email'),
+        Uri.parse('${AppConstants.baseUrl}/api/auth/verify-signup'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'email': widget.email,
@@ -51,17 +52,19 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       setState(() => _isLoading = false);
 
       if (mounted) {
-        if (response.statusCode == 200) {
+        if (response.statusCode == 200 || response.statusCode == 201) {
           final data = jsonDecode(response.body);
 
-          // Update auth provider with new token
+          // Update auth provider with new token and user data
           final authProvider = Provider.of<AuthProvider>(context, listen: false);
-          // Store new verified token
-          await authProvider.storeVerifiedToken(data['token']);
+          await authProvider.storeVerifiedToken(
+            data['token'],
+            userData: data['user'],
+          );
 
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Email verified successfully!'),
+              content: Text('Account created and verified successfully!'),
               backgroundColor: AppConstants.primaryTeal,
             ),
           );
@@ -97,10 +100,10 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     setState(() => _isResending = true);
 
     try {
+      // Use resend-signup-code endpoint for pending signups
       final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/api/auth/resend-verification'),
+        Uri.parse('${AppConstants.baseUrl}/api/auth/resend-signup-code?email=${Uri.encodeComponent(widget.email)}'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': widget.email}),
       ).timeout(const Duration(seconds: 10));
 
       setState(() => _isResending = false);

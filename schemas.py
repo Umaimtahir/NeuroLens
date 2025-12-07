@@ -84,6 +84,17 @@ class SignupResponse(BaseModel):
     user: UserResponse
     message: str = "Account created successfully"
 
+
+class InitiateSignupResponse(BaseModel):
+    message: str = "Verification code sent to your email"
+    email: str
+
+
+class VerifySignupRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(..., min_length=6, max_length=6)
+
+
 class VerifyEmailRequest(BaseModel):
     email: EmailStr
     code: str = Field(..., min_length=6, max_length=6)
