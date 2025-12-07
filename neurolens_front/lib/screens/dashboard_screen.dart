@@ -22,6 +22,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _currentContent;
   String _status = 'Idle';
   DateTime? _lastSession;
+  Map<String, dynamic>? _sessionSummary;
   bool _isLoading = true;
 
   @override
@@ -51,6 +52,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _emotionIntensity = response['current_emotion_intensity']?.toDouble();
           _currentContent = response['current_content'];
           _status = response['status'] ?? 'Idle';
+          _sessionSummary = response['session_summary'];
 
           if (response['last_session'] != null) {
             _lastSession = DateTime.parse(response['last_session']);
@@ -97,23 +99,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Expanded(
                   child: _buildInfoCard(
                     context,
-                    'Current Emotion',
-                    _currentEmotion?.toUpperCase() ?? 'N/A',
+                    _status == 'Recording' ? 'Current Emotion' : 'Last Emotion',
+                    _currentEmotion?.toUpperCase() ?? 'No data yet',
                     Icons.emoji_emotions,
                     _getEmotionColor(_currentEmotion),
                     subtitle: _emotionIntensity != null
                         ? '${(_emotionIntensity! * 100).toStringAsFixed(0)}% intensity'
-                        : null,
+                        : _currentEmotion == null ? 'Start recording to track' : null,
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: _buildInfoCard(
                     context,
-                    'Current Content',
-                    _currentContent ?? 'N/A',
+                    _status == 'Recording' ? 'Current Content' : 'Last Content',
+                    _currentContent ?? 'No data yet',
                     Icons.school,
                     Colors.amber,
+                    subtitle: _currentContent == null ? 'Start recording to track' : null,
                   ),
                 ),
               ],
@@ -127,9 +130,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     'Last Session',
                     _lastSession != null
                         ? _formatTimeSince(_lastSession!)
-                        : 'N/A',
+                        : 'No sessions yet',
                     Icons.access_time,
                     Colors.blue,
+                    subtitle: _lastSession == null ? 'Start your first session' : null,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -140,10 +144,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     _status,
                     _status == 'Recording' ? Icons.fiber_manual_record : Icons.circle_outlined,
                     _status == 'Recording' ? Colors.red : Colors.grey,
+                    subtitle: _status == 'Recording' ? 'Live monitoring active' : 'Ready to start',
                   ),
                 ),
               ],
             ),
+            
+            // Session Summary Card (if available)
+            if (_sessionSummary != null) ...[
+              const SizedBox(height: 24),
+              _buildSessionSummaryCard(),
+            ],
 
             const SizedBox(height: 32),
 
@@ -284,5 +295,109 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } else {
       return '${difference.inDays} days ago';
     }
+  }
+  
+  Widget _buildSessionSummaryCard() {
+    final totalReadings = _sessionSummary!['total_readings'] ?? 0;
+    final dominantEmotion = _sessionSummary!['dominant_emotion'];
+    final avgIntensity = _sessionSummary!['average_intensity'] ?? 0;
+    final emotionBreakdown = _sessionSummary!['emotion_breakdown'] as Map<String, dynamic>?;
+    
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.insights, color: Colors.teal, size: 24),
+                const SizedBox(width: 8),
+                Text(
+                  "Today's Summary",
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildSummaryItem(
+                  Icons.analytics,
+                  '$totalReadings',
+                  'Readings',
+                  Colors.blue,
+                ),
+                _buildSummaryItem(
+                  Icons.emoji_emotions,
+                  dominantEmotion?.toString().toUpperCase() ?? 'N/A',
+                  'Dominant',
+                  _getEmotionColor(dominantEmotion),
+                ),
+                _buildSummaryItem(
+                  Icons.speed,
+                  '$avgIntensity%',
+                  'Avg Intensity',
+                  Colors.orange,
+                ),
+              ],
+            ),
+            if (emotionBreakdown != null && emotionBreakdown.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 12),
+              Text(
+                'Emotion Breakdown',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: emotionBreakdown.entries.map((entry) {
+                  return Chip(
+                    avatar: CircleAvatar(
+                      backgroundColor: _getEmotionColor(entry.key),
+                      child: Text(
+                        '${entry.value}',
+                        style: const TextStyle(color: Colors.white, fontSize: 10),
+                      ),
+                    ),
+                    label: Text(entry.key),
+                    backgroundColor: _getEmotionColor(entry.key).withOpacity(0.1),
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildSummaryItem(IconData icon, String value, String label, Color color) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 28),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
   }
 }

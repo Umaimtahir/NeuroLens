@@ -619,6 +619,61 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
         raise HTTPException(status_code=500, detail="Password reset failed")
 
 
+# ==================== RECORDING STATE MANAGEMENT ====================
+
+@app.post("/api/recording/start")
+def start_recording(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Mark recording as started for current user"""
+    
+    is_guest = getattr(current_user, 'is_guest', False)
+    
+    if is_guest or current_user.id == 0:
+        return {"status": "recording", "message": "Guest recording started"}
+    
+    try:
+        user = db.query(User).filter(User.id == current_user.id).first()
+        if user:
+            user.is_recording = True
+            user.last_activity = datetime.now(timezone.utc)
+            db.commit()
+            print(f"🎬 Recording started for user: {current_user.id}")
+        
+        return {"status": "recording", "message": "Recording started"}
+    except Exception as e:
+        print(f"❌ Failed to start recording: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to start recording")
+
+
+@app.post("/api/recording/stop")
+def stop_recording(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Mark recording as stopped for current user"""
+    
+    is_guest = getattr(current_user, 'is_guest', False)
+    
+    if is_guest or current_user.id == 0:
+        return {"status": "idle", "message": "Guest recording stopped"}
+    
+    try:
+        user = db.query(User).filter(User.id == current_user.id).first()
+        if user:
+            user.is_recording = False
+            db.commit()
+            print(f"⏹️ Recording stopped for user: {current_user.id}")
+        
+        return {"status": "idle", "message": "Recording stopped"}
+    except Exception as e:
+        print(f"❌ Failed to stop recording: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to stop recording")
+
+
 @app.post("/api/analyze/frame")
 async def analyze_frame(
     file: UploadFile = File(None),
@@ -683,6 +738,7 @@ async def analyze_frame(
                         user.current_emotion_intensity = emotion_data["intensity"]
                         user.current_content = emotion_data["content"]
                         user.last_activity = datetime.now(timezone.utc)
+                        user.is_recording = True  # Mark as actively recording
                         db.add(user)
                 
                 db.commit()
@@ -921,7 +977,7 @@ def admin_get_active_users(
                 "current_emotion_intensity": u.current_emotion_intensity or 0,
                 "current_content": u.current_content or "N/A",
                 "last_activity": u.last_activity.isoformat() if u.last_activity else None,
-                "status": "Recording" if (datetime.now(timezone.utc) - u.last_activity).total_seconds() < 60 else "Idle"
+                "status": "Recording" if getattr(u, 'is_recording', False) else "Idle"
             }
             for u in active_users
         ]
@@ -943,30 +999,72 @@ def get_dashboard_status(
             "current_emotion_intensity": None,
             "current_content": None,
             "status": "Idle",
-            "last_session": None
+            "last_session": None,
+            "session_summary": None
         }
     
     # Get user's current state
     user = db.query(User).filter(User.id == current_user.id).first()
     
-    # Get last activity time
+    # Get last emotion log
     last_log = db.query(EmotionLog).filter(
         EmotionLog.user_id == current_user.id
     ).order_by(EmotionLog.created_at.desc()).first()
     
-    # Determine status based on last activity
+    # Determine status based on is_recording flag (not time-based)
     status = "Idle"
-    if user and user.last_activity:
-        time_diff = datetime.now(timezone.utc) - user.last_activity
-        if time_diff.total_seconds() < 60:  # Active within last minute
-            status = "Recording"
+    is_recording = False
+    if user:
+        is_recording = getattr(user, 'is_recording', False)
+        status = "Recording" if is_recording else "Idle"
+    
+    # If recording, show current real-time data
+    # If idle, show last recorded session data
+    if is_recording:
+        emotion = user.current_emotion if user else None
+        emotion_intensity = user.current_emotion_intensity if user else None
+        content = user.current_content if user else None
+    else:
+        # Show last recorded data when idle
+        emotion = last_log.emotion if last_log else None
+        emotion_intensity = last_log.intensity if last_log else None
+        content = last_log.content_type if last_log else (user.current_content if user else None)
+    
+    # Get session summary for today
+    from sqlalchemy import func
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    today_logs = db.query(EmotionLog).filter(
+        EmotionLog.user_id == current_user.id,
+        EmotionLog.created_at >= today_start
+    ).all()
+    
+    session_summary = None
+    if today_logs:
+        # Calculate emotion distribution for today
+        emotion_counts = {}
+        total_intensity = 0
+        for log in today_logs:
+            emotion_counts[log.emotion] = emotion_counts.get(log.emotion, 0) + 1
+            total_intensity += log.intensity or 0.5
+        
+        dominant_emotion = max(emotion_counts, key=emotion_counts.get) if emotion_counts else None
+        avg_intensity = total_intensity / len(today_logs) if today_logs else 0
+        
+        session_summary = {
+            "total_readings": len(today_logs),
+            "dominant_emotion": dominant_emotion,
+            "average_intensity": round(avg_intensity * 100),
+            "emotion_breakdown": emotion_counts
+        }
     
     return {
-        "current_emotion": user.current_emotion if user else None,
-        "current_emotion_intensity": user.current_emotion_intensity if user else None,
-        "current_content": user.current_content if user else None,
+        "current_emotion": emotion,
+        "current_emotion_intensity": emotion_intensity,
+        "current_content": content,
         "status": status,
-        "last_session": last_log.created_at.isoformat() if last_log else None
+        "last_session": last_log.created_at.isoformat() if last_log else None,
+        "session_summary": session_summary
     }
 
 @app.get("/api/admin/stats")

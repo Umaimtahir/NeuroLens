@@ -59,6 +59,14 @@ class AnalysisProvider with ChangeNotifier {
     _emotionHistory.clear();
     _contentHistory.clear();
     
+    // ✅ Notify backend that recording started
+    try {
+      await _apiService.post('/api/recording/start');
+      print('✅ Backend notified: recording started');
+    } catch (e) {
+      print('⚠️ Failed to notify backend of recording start: $e');
+    }
+    
     // ✅ Start notification session
     _notificationService.startSession();
     
@@ -170,12 +178,20 @@ class AnalysisProvider with ChangeNotifier {
   }
 
   /// Stop analysis
-  void stopAnalysis() {
+  Future<void> stopAnalysis() async {
     print('⏹️ Stopping analysis...');
     _isAnalyzing = false;
     _analysisTimer?.cancel();
     _analysisTimer = null;
     _cameraController = null;  // Don't dispose, just clear reference
+    
+    // ✅ Notify backend that recording stopped
+    try {
+      await _apiService.post('/api/recording/stop');
+      print('✅ Backend notified: recording stopped');
+    } catch (e) {
+      print('⚠️ Failed to notify backend of recording stop: $e');
+    }
     
     // ✅ End notification session and generate session summary
     _notificationService.endSession();

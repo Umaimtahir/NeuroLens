@@ -122,7 +122,7 @@ class _CameraScreenState extends State<CameraScreen>
         final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
 
         cameraProvider.pauseCamera();
-        analysisProvider.stopAnalysis();
+        await analysisProvider.stopAnalysis();
 
         return true;
       },
@@ -461,6 +461,8 @@ class _CameraScreenState extends State<CameraScreen>
     final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
 
     cameraProvider.pauseCamera();
+    // Note: stopAnalysis is async but we can't await in dispose
+    // The WillPopScope handles proper cleanup when navigating away
     analysisProvider.stopAnalysis();
 
     super.dispose();
@@ -479,7 +481,7 @@ class _CameraScreenState extends State<CameraScreen>
     final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
 
     final path = await cameraProvider.stopRecording();
-    analysisProvider.stopAnalysis();
+    await analysisProvider.stopAnalysis();
 
     if (path != null && mounted) {
       final name = path.split('/').last;

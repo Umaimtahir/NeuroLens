@@ -27,6 +27,7 @@ class User(Base):
     current_emotion_intensity = Column(Float, nullable=True)
     current_content = Column(String(50), nullable=True)
     last_activity = Column(DateTime(timezone=True), nullable=True)
+    is_recording = Column(Boolean, default=False, nullable=False)  # Track active recording state
     
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
