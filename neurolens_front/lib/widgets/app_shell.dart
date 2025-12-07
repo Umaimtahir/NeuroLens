@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/analysis_provider.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/camera_screen.dart';
 import '../screens/analysis_screen.dart';
@@ -9,6 +10,7 @@ import '../screens/recommendations_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/login_screen.dart';
+import '../widgets/notification_widgets.dart';
 import '../utils/constants.dart';
 
 class AppShell extends StatelessWidget {
@@ -23,23 +25,52 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(currentRoute),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('No new notifications')),
-              );
-            },
-            tooltip: 'Notifications',
+    return Consumer<AnalysisProvider>(
+      builder: (context, analysisProvider, _) {
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(currentRoute),
+            actions: [
+              NotificationBell(
+                unreadCount: analysisProvider.unreadNotificationCount,
+                onTap: () => _showNotificationPanel(context, analysisProvider),
+              ),
+            ],
           ),
-        ],
+          drawer: _buildDrawer(context),
+          body: body,
+        );
+      },
+    );
+  }
+  
+  void _showNotificationPanel(BuildContext context, AnalysisProvider analysisProvider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      drawer: _buildDrawer(context),
-      body: body,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          child: NotificationPanel(
+            notifications: analysisProvider.notifications,
+            onClearAll: () {
+              analysisProvider.clearAllNotifications();
+              Navigator.pop(context);
+            },
+            onMarkAsRead: (id) {
+              analysisProvider.markNotificationAsRead(id);
+            },
+          ),
+        ),
+      ),
     );
   }
 

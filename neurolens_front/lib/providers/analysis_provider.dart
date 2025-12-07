@@ -6,10 +6,12 @@ import 'package:camera/camera.dart';
 import '../models/emotion_model.dart';
 import '../models/content_model.dart';
 import '../services/api_service.dart';
+import '../services/notification_service.dart';
 import 'package:http/http.dart' as http;
 
 class AnalysisProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
+  final NotificationService _notificationService = NotificationService();
 
   EmotionModel? _currentEmotion;
   ContentModel? _currentContent;
@@ -26,6 +28,15 @@ class AnalysisProvider with ChangeNotifier {
   List<ContentModel> get contentHistory => _contentHistory;
   bool get isAnalyzing => _isAnalyzing;
   CameraController? get cameraController => _cameraController;
+  
+  /// Access notification service for UI binding
+  NotificationService get notificationService => _notificationService;
+  
+  /// Get all notifications
+  List<AppNotification> get notifications => _notificationService.notifications;
+  
+  /// Get unread notification count
+  int get unreadNotificationCount => _notificationService.unreadCount;
 
   /// Start real-time analysis with SHARED camera controller
   /// Pass in the camera controller from CameraProvider
@@ -47,6 +58,10 @@ class AnalysisProvider with ChangeNotifier {
     _isAnalyzing = true;
     _emotionHistory.clear();
     _contentHistory.clear();
+    
+    // ✅ Start notification session
+    _notificationService.startSession();
+    
     notifyListeners();
 
     // ✅ Capture and send frames every 3 seconds
@@ -86,6 +101,12 @@ class AnalysisProvider with ChangeNotifier {
         // Update state
         _currentEmotion = emotion;
         _currentContent = content;
+        
+        // ✅ Process emotion for notifications
+        _notificationService.processEmotion(
+          emotion.emotion, 
+          emotion.intensity,
+        );
 
         _emotionHistory.add(emotion);
         if (_emotionHistory.length > 100) {
@@ -155,6 +176,10 @@ class AnalysisProvider with ChangeNotifier {
     _analysisTimer?.cancel();
     _analysisTimer = null;
     _cameraController = null;  // Don't dispose, just clear reference
+    
+    // ✅ End notification session and generate session summary
+    _notificationService.endSession();
+    
     notifyListeners();
   }
 
@@ -166,10 +191,23 @@ class AnalysisProvider with ChangeNotifier {
     _currentContent = null;
     notifyListeners();
   }
+  
+  /// Mark notification as read
+  void markNotificationAsRead(String notificationId) {
+    _notificationService.markAsRead(notificationId);
+    notifyListeners();
+  }
+  
+  /// Clear all notifications
+  void clearAllNotifications() {
+    _notificationService.clearAll();
+    notifyListeners();
+  }
 
   @override
   void dispose() {
     stopAnalysis();
+    _notificationService.dispose();
     super.dispose();
   }
 }

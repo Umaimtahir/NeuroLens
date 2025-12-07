@@ -1117,6 +1117,261 @@ def admin_get_audit_summary(
     }
 
 
+# ==================== RECOMMENDATIONS API ====================
+
+WELLNESS_RECOMMENDATIONS = {
+    "stressed": [
+        {
+            "title": "Take a 5-minute break",
+            "description": "Step away from your screen and take some deep breaths. Your stress levels have been elevated.",
+            "priority": "High",
+            "icon": "self_improvement",
+            "action": "Start a guided breathing exercise"
+        },
+        {
+            "title": "Practice 4-7-8 Breathing",
+            "description": "Inhale for 4 seconds, hold for 7 seconds, exhale for 8 seconds. This activates your relaxation response.",
+            "priority": "High",
+            "icon": "air",
+            "action": "Start breathing exercise"
+        },
+        {
+            "title": "Progressive Muscle Relaxation",
+            "description": "Tense and release each muscle group to release physical tension from stress.",
+            "priority": "Medium",
+            "icon": "accessibility_new",
+            "action": "View exercise guide"
+        }
+    ],
+    "anxious": [
+        {
+            "title": "Ground yourself with 5-4-3-2-1",
+            "description": "Notice 5 things you see, 4 you feel, 3 you hear, 2 you smell, and 1 you taste.",
+            "priority": "High",
+            "icon": "nature",
+            "action": "Start grounding exercise"
+        },
+        {
+            "title": "Take slow, deep breaths",
+            "description": "Slow your breathing to calm your nervous system and reduce anxiety.",
+            "priority": "High",
+            "icon": "air",
+            "action": "Start breathing exercise"
+        }
+    ],
+    "angry": [
+        {
+            "title": "Step away for a moment",
+            "description": "Take a brief break to cool down before responding to the situation.",
+            "priority": "High",
+            "icon": "directions_walk",
+            "action": "Set a 5-minute timer"
+        },
+        {
+            "title": "Physical release",
+            "description": "Do some stretches or light exercise to release the physical tension of anger.",
+            "priority": "Medium",
+            "icon": "fitness_center",
+            "action": "View stretch routine"
+        }
+    ],
+    "sad": [
+        {
+            "title": "Reach out to someone",
+            "description": "Consider talking to a friend or loved one. Social connection can help lift your mood.",
+            "priority": "High",
+            "icon": "people",
+            "action": "Open contacts"
+        },
+        {
+            "title": "Take a brief walk",
+            "description": "Light physical activity and fresh air can help improve your mood.",
+            "priority": "Medium",
+            "icon": "directions_walk",
+            "action": "Set activity reminder"
+        },
+        {
+            "title": "Listen to uplifting music",
+            "description": "Music can positively influence your emotional state.",
+            "priority": "Low",
+            "icon": "music_note",
+            "action": "Open music player"
+        }
+    ],
+    "tired": [
+        {
+            "title": "Take a power nap",
+            "description": "A 15-20 minute nap can help restore alertness without affecting nighttime sleep.",
+            "priority": "High",
+            "icon": "hotel",
+            "action": "Set 20-minute timer"
+        },
+        {
+            "title": "Get some fresh air",
+            "description": "Step outside briefly. Fresh air and natural light can boost energy levels.",
+            "priority": "Medium",
+            "icon": "nature",
+            "action": "Set reminder"
+        },
+        {
+            "title": "Stay hydrated",
+            "description": "Dehydration can cause fatigue. Drink a glass of water.",
+            "priority": "Medium",
+            "icon": "local_drink",
+            "action": "Log water intake"
+        }
+    ],
+    "focused": [
+        {
+            "title": "Maintain your focus",
+            "description": "You're in a great flow state! Consider using the Pomodoro technique.",
+            "priority": "Low",
+            "icon": "timer",
+            "action": "Start Pomodoro timer"
+        }
+    ],
+    "happy": [
+        {
+            "title": "Capture this moment",
+            "description": "Take note of what's making you happy. Gratitude journaling enhances well-being.",
+            "priority": "Low",
+            "icon": "edit_note",
+            "action": "Open journal"
+        }
+    ],
+    "neutral": [
+        {
+            "title": "Stay hydrated",
+            "description": "Drink water regularly to maintain energy and focus.",
+            "priority": "Low",
+            "icon": "local_drink",
+            "action": "Log water intake"
+        },
+        {
+            "title": "Stretch your body",
+            "description": "Regular stretching helps prevent tension buildup.",
+            "priority": "Low",
+            "icon": "accessibility_new",
+            "action": "View stretch routine"
+        }
+    ]
+}
+
+
+@app.get("/api/recommendations")
+def get_recommendations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get personalized recommendations based on emotional patterns"""
+    
+    is_guest = getattr(current_user, 'is_guest', False)
+    
+    if is_guest or current_user.id == 0:
+        # Return general recommendations for guests
+        return {
+            "recommendations": WELLNESS_RECOMMENDATIONS.get("neutral", []),
+            "trigger_emotion": None,
+            "trigger_reason": "General wellness tips"
+        }
+    
+    # Get recent emotion logs (last hour)
+    one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+    recent_logs = db.query(EmotionLog).filter(
+        EmotionLog.user_id == current_user.id,
+        EmotionLog.created_at >= one_hour_ago
+    ).order_by(EmotionLog.created_at.desc()).limit(20).all()
+    
+    if not recent_logs:
+        return {
+            "recommendations": WELLNESS_RECOMMENDATIONS.get("neutral", []),
+            "trigger_emotion": None,
+            "trigger_reason": "No recent activity"
+        }
+    
+    # Analyze emotion patterns
+    emotion_counts = {}
+    total_intensity = {}
+    
+    for log in recent_logs:
+        emotion = log.emotion.lower()
+        emotion_counts[emotion] = emotion_counts.get(emotion, 0) + 1
+        total_intensity[emotion] = total_intensity.get(emotion, 0) + (log.intensity or 0.5)
+    
+    # Find dominant negative emotion
+    negative_emotions = ['stressed', 'anxious', 'angry', 'sad', 'tired', 'fear', 'fearful']
+    dominant_emotion = None
+    max_score = 0
+    
+    for emotion in negative_emotions:
+        if emotion in emotion_counts:
+            # Score = count * average intensity
+            avg_intensity = total_intensity[emotion] / emotion_counts[emotion]
+            score = emotion_counts[emotion] * avg_intensity
+            if score > max_score:
+                max_score = score
+                dominant_emotion = emotion
+    
+    # Map fear variations to anxious
+    if dominant_emotion in ['fear', 'fearful']:
+        dominant_emotion = 'anxious'
+    
+    # Get recommendations for the dominant emotion (or neutral if no negative emotions)
+    trigger_emotion = dominant_emotion or 'neutral'
+    recommendations = WELLNESS_RECOMMENDATIONS.get(trigger_emotion, WELLNESS_RECOMMENDATIONS['neutral'])
+    
+    # Determine trigger reason
+    if dominant_emotion:
+        count = emotion_counts.get(dominant_emotion, 0) or emotion_counts.get('fear', 0) or emotion_counts.get('fearful', 0)
+        avg_intensity = (total_intensity.get(dominant_emotion, 0) / max(count, 1)) * 100
+        trigger_reason = f"Detected {trigger_emotion} emotion {count} times in the last hour (avg intensity: {avg_intensity:.0f}%)"
+    else:
+        trigger_reason = "Based on your general wellness"
+    
+    return {
+        "recommendations": recommendations,
+        "trigger_emotion": trigger_emotion,
+        "trigger_reason": trigger_reason,
+        "emotion_summary": {
+            emotion: {
+                "count": emotion_counts.get(emotion, 0),
+                "avg_intensity": (total_intensity.get(emotion, 0) / emotion_counts.get(emotion, 1)) * 100 if emotion in emotion_counts else 0
+            }
+            for emotion in emotion_counts
+        }
+    }
+
+
+@app.post("/api/recommendations/trigger")
+def trigger_recommendation(
+    emotion: str = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Manually trigger recommendations for a specific emotion"""
+    
+    if emotion:
+        emotion = emotion.lower()
+        if emotion in ['fear', 'fearful']:
+            emotion = 'anxious'
+    else:
+        # Get current emotion from user
+        is_guest = getattr(current_user, 'is_guest', False)
+        if is_guest or current_user.id == 0:
+            emotion = 'neutral'
+        else:
+            user = db.query(User).filter(User.id == current_user.id).first()
+            emotion = (user.current_emotion or 'neutral').lower()
+    
+    recommendations = WELLNESS_RECOMMENDATIONS.get(emotion, WELLNESS_RECOMMENDATIONS['neutral'])
+    
+    return {
+        "recommendations": recommendations,
+        "trigger_emotion": emotion,
+        "trigger_reason": f"Manually triggered for {emotion} state"
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

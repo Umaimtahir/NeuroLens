@@ -7,6 +7,8 @@ import '../providers/camera_provider.dart';
 import '../providers/analysis_provider.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/recording_control.dart';
+import '../widgets/notification_widgets.dart';
+import '../services/notification_service.dart';
 import '../utils/constants.dart';
 
 class CameraScreen extends StatefulWidget {
@@ -20,6 +22,7 @@ class _CameraScreenState extends State<CameraScreen>
     with WidgetsBindingObserver {
   bool _permissionRequested = false;
   bool _permissionDenied = false;
+  AppNotification? _currentToast;
 
   @override
   void initState() {
@@ -28,6 +31,22 @@ class _CameraScreenState extends State<CameraScreen>
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeCamera();
+      _setupNotificationListener();
+    });
+  }
+  
+  void _setupNotificationListener() {
+    final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
+    analysisProvider.notificationService.notificationStream.listen((notification) {
+      if (mounted) {
+        setState(() => _currentToast = notification);
+        // Auto-dismiss toast after 5 seconds
+        Future.delayed(const Duration(seconds: 5), () {
+          if (mounted && _currentToast?.id == notification.id) {
+            setState(() => _currentToast = null);
+          }
+        });
+      }
     });
   }
 
@@ -341,9 +360,74 @@ class _CameraScreenState extends State<CameraScreen>
                       ),
                     ),
                   ),
+                  
+                // ✅ NOTIFICATION BELL
+                Positioned(
+                  top: 20,
+                  right: analysisProvider.currentContent != null ? 150 : 20,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: NotificationBell(
+                      unreadCount: analysisProvider.unreadNotificationCount,
+                      onTap: () => _showNotificationPanel(context, analysisProvider),
+                    ),
+                  ),
+                ),
+                
+                // ✅ TOAST NOTIFICATION OVERLAY
+                if (_currentToast != null)
+                  Positioned(
+                    top: 90,
+                    left: 16,
+                    right: 16,
+                    child: NotificationToast(
+                      notification: _currentToast!,
+                      onDismiss: () {
+                        if (mounted) {
+                          setState(() => _currentToast = null);
+                        }
+                      },
+                      onAction: () {
+                        analysisProvider.markNotificationAsRead(_currentToast!.id);
+                      },
+                    ),
+                  ),
               ],
             );
           },
+        ),
+      ),
+    );
+  }
+  
+  void _showNotificationPanel(BuildContext context, AnalysisProvider analysisProvider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          child: NotificationPanel(
+            notifications: analysisProvider.notifications,
+            onClearAll: () {
+              analysisProvider.clearAllNotifications();
+              Navigator.pop(context);
+            },
+            onMarkAsRead: (id) {
+              analysisProvider.markNotificationAsRead(id);
+            },
+          ),
         ),
       ),
     );

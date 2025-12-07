@@ -64,6 +64,42 @@ class ApiService {
       rethrow;
     }
   }
+  
+  // ✅ Generic POST method with optional query params and body
+  Future<Map<String, dynamic>> post(
+    String endpoint, {
+    Map<String, dynamic>? body,
+    Map<String, String>? queryParams,
+  }) async {
+    try {
+      // Build URL with query params if provided
+      var uri = Uri.parse('$baseUrl$endpoint');
+      if (queryParams != null && queryParams.isNotEmpty) {
+        uri = uri.replace(queryParameters: queryParams);
+      }
+      
+      print('📡 POST request to: $uri');
+
+      final response = await http.post(
+        uri,
+        headers: headers,
+        body: body != null ? jsonEncode(body) : null,
+      ).timeout(const Duration(seconds: 10));
+
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['detail'] ?? 'Request failed');
+      }
+    } catch (e) {
+      print('❌ POST request error: $e');
+      rethrow;
+    }
+  }
 
   /// Get current user profile
   Future<Map<String, dynamic>> getCurrentUser() async {
