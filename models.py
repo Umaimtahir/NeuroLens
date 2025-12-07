@@ -22,13 +22,15 @@ class User(Base):
     reset_token = Column(String(10), nullable=True)
     reset_token_expiry = Column(DateTime(timezone=True), nullable=True)
     
+    # ✅ Current state tracking (ADD THESE)
+    current_emotion = Column(String(50), nullable=True)
+    current_emotion_intensity = Column(Float, nullable=True)
+    current_content = Column(String(50), nullable=True)
+    last_activity = Column(DateTime(timezone=True), nullable=True)
+    
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-    # Current emotion state
-    current_emotion = Column(String(50), nullable=True)
-    current_emotion_intensity = Column(Float, nullable=True)
 
 
 class EmotionLog(Base):

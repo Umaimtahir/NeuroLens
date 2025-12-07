@@ -6,12 +6,10 @@ import 'package:camera/camera.dart';
 import '../models/emotion_model.dart';
 import '../models/content_model.dart';
 import '../services/api_service.dart';
-import '../services/camera_service.dart';
 import 'package:http/http.dart' as http;
 
 class AnalysisProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
-  final CameraService _cameraService = CameraService();
 
   EmotionModel? _currentEmotion;
   ContentModel? _currentContent;
@@ -20,7 +18,7 @@ class AnalysisProvider with ChangeNotifier {
 
   Timer? _analysisTimer;
   bool _isAnalyzing = false;
-  CameraController? _cameraController;
+  CameraController? _cameraController;  // Reference to shared camera
 
   EmotionModel? get currentEmotion => _currentEmotion;
   ContentModel? get currentContent => _currentContent;
@@ -29,40 +27,48 @@ class AnalysisProvider with ChangeNotifier {
   bool get isAnalyzing => _isAnalyzing;
   CameraController? get cameraController => _cameraController;
 
-  /// Start real-time analysis with camera
-  Future<void> startAnalysis() async {
-    if (_isAnalyzing) return;
-
-    // Initialize camera
-    _cameraController = await _cameraService.getCameraController();
-    if (_cameraController == null) {
-      print('❌ Camera not available');
+  /// Start real-time analysis with SHARED camera controller
+  /// Pass in the camera controller from CameraProvider
+  Future<void> startAnalysis({CameraController? sharedCamera}) async {
+    if (_isAnalyzing) {
+      print('⚠️ Analysis already running');
       return;
     }
 
+    // ✅ Use shared camera controller instead of creating new one
+    _cameraController = sharedCamera;
+
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      print('❌ Camera not available for analysis');
+      return;
+    }
+
+    print('✅ Starting analysis with shared camera');
     _isAnalyzing = true;
     _emotionHistory.clear();
     _contentHistory.clear();
+    notifyListeners();
 
     // ✅ Capture and send frames every 3 seconds
     _analysisTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (_cameraController == null || !_cameraController!.value.isInitialized) {
+        print('⚠️ Camera no longer available');
         return;
       }
 
       try {
-        print('📸 Capturing frame...');
+        print('📸 Capturing frame for analysis...');
 
-        // Capture image from camera
+        // Capture image
         final image = await _cameraController!.takePicture();
         final bytes = await image.readAsBytes();
 
-        print('📤 Sending frame to API...');
+        print('📤 Sending ${bytes.length} bytes to backend...');
 
         // Send frame to backend
         final result = await _sendFrameToAPI(bytes);
 
-        print('✅ API response: ${result['emotion']} (${result['intensity']})');
+        print('✅ Backend response: ${result['emotion']} (${result['intensity']})');
 
         // Create models from API response
         final emotion = EmotionModel(
@@ -96,8 +102,6 @@ class AnalysisProvider with ChangeNotifier {
         print('❌ Error analyzing frame: $e');
       }
     });
-
-    notifyListeners();
   }
 
   /// Send frame to backend API with multipart form data
@@ -108,27 +112,33 @@ class AnalysisProvider with ChangeNotifier {
         Uri.parse('${_apiService.baseUrl}/api/analyze/frame'),
       );
 
-      // ✅ FIXED: Changed _headers to headers
+      // Add headers with auth token
       final headers = _apiService.headers;
       request.headers.addAll(headers);
 
       // Add image file
       request.files.add(http.MultipartFile.fromBytes(
-        'file',
+        'file',  // ✅ Make sure this matches backend parameter name
         frameBytes,
         filename: 'frame.jpg',
       ));
 
+      print('📡 Sending request to: ${request.url}');
+
       var response = await request.send();
       var responseData = await response.stream.bytesToString();
+
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: $responseData');
 
       if (response.statusCode == 200) {
         return json.decode(responseData);
       } else {
-        throw Exception('Failed to analyze frame: ${response.statusCode}');
+        throw Exception('Backend returned ${response.statusCode}: $responseData');
       }
     } catch (e) {
       print('❌ API error: $e');
+      // Return fallback data
       return {
         'emotion': 'neutral',
         'intensity': 0.5,
@@ -140,11 +150,11 @@ class AnalysisProvider with ChangeNotifier {
 
   /// Stop analysis
   void stopAnalysis() {
+    print('⏹️ Stopping analysis...');
     _isAnalyzing = false;
     _analysisTimer?.cancel();
     _analysisTimer = null;
-    _cameraController?.dispose();
-    _cameraController = null;
+    _cameraController = null;  // Don't dispose, just clear reference
     notifyListeners();
   }
 

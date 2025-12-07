@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'screens/splash_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/signup_screen.dart';
+import 'screens/dashboard_screen.dart';
+import 'screens/camera_screen.dart';
+import 'screens/analysis_screen.dart';
+import 'screens/reports_screen.dart';
+import 'screens/recommendations_screen.dart';
+import 'screens/settings_screen.dart';
+import 'screens/profile_screen.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/camera_provider.dart';
@@ -33,6 +42,18 @@ class NeuroLensApp extends StatelessWidget {
             darkTheme: AppTheme.darkTheme,
             themeMode: themeProvider.themeMode,
             home: const SplashScreen(),
+            // ✅ ADD THESE ROUTES
+            routes: {
+              '/login': (context) => const LoginScreen(),
+              '/signup': (context) => const SignupScreen(),
+              '/dashboard': (context) => const DashboardScreen(),
+              '/camera': (context) => const CameraScreen(),
+              '/analysis': (context) => const AnalysisScreen(),
+              '/reports': (context) => const ReportsScreen(),
+              '/recommendations': (context) => const RecommendationsScreen(),
+              '/settings': (context) => const SettingsScreen(),
+              '/profile': (context) => const ProfileScreen(),
+            },
           );
         },
       ),

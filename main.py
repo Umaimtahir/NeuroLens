@@ -426,24 +426,35 @@ async def analyze_frame(
     if not is_guest:
         username = EncryptionService.decrypt_data(current_user.username_encrypted)
     
-    if emotion_detector and file:
+    content_types = ['Studying', 'Coding', 'Video', 'Reading']
+    
+    if file:
         try:
             contents = await file.read()
-            result = emotion_detector.analyze_frame(contents)
+            result = emotion_detector.process_frame(contents) if emotion_detector else None
             
-            emotions = ['happy', 'sad', 'angry', 'neutral', 'focused', 'stressed', 'tired']
-            content_types = ['Studying', 'Coding', 'Video', 'Reading']
+            if result:
+                emotion_data = {
+                    "emotion": result.get('emotion', 'neutral'),
+                    "intensity": result.get('intensity', 0.5),
+                    "content": random.choice(content_types),
+                    "content_conf": round(random.uniform(0.7, 1.0), 2),
+                    "timestamp": datetime.now().isoformat(),
+                    "face_detected": result.get('face_detected', False),
+                    "probabilities": result.get('probabilities', {})
+                }
+            else:
+                # Fallback if model not available
+                emotions = ['happy', 'neutral', 'focused', 'stressed', 'tired']
+                emotion_data = {
+                    "emotion": random.choice(emotions),
+                    "intensity": round(random.uniform(0.5, 1.0), 2),
+                    "content": random.choice(content_types),
+                    "content_conf": round(random.uniform(0.7, 1.0), 2),
+                    "timestamp": datetime.now().isoformat()
+                }
             
-            emotion_data = {
-                "emotion": result.get('emotion', 'neutral'),
-                "intensity": result.get('intensity', 0.5),
-                "content": random.choice(content_types),
-                "content_conf": round(random.uniform(0.7, 1.0), 2),
-                "timestamp": datetime.now().isoformat(),
-                "face_detected": result.get('face_detected', False),
-                "probabilities": result.get('probabilities', {})
-            }
-            
+            # Save to database
             try:
                 emotion_log = EmotionLog(
                     user_id=current_user.id,
@@ -452,16 +463,20 @@ async def analyze_frame(
                     intensity=emotion_data["intensity"],
                     content_type=emotion_data["content"],
                     content_confidence=emotion_data["content_conf"],
-                    probabilities=json.dumps(emotion_data["probabilities"]),
+                    probabilities=json.dumps(emotion_data.get("probabilities", {})),
                     is_guest=is_guest
                 )
                 db.add(emotion_log)
                 
-                # Update user's current emotion
+                # ✅ Update user's current state
                 if not is_guest:
-                    current_user.current_emotion = emotion_data["emotion"]
-                    current_user.current_emotion_intensity = emotion_data["intensity"]
-                    db.add(current_user)
+                    user = db.query(User).filter(User.id == current_user.id).first()
+                    if user:
+                        user.current_emotion = emotion_data["emotion"]
+                        user.current_emotion_intensity = emotion_data["intensity"]
+                        user.current_content = emotion_data["content"]
+                        user.last_activity = datetime.now(timezone.utc)
+                        db.add(user)
                 
                 db.commit()
                 print(f"✅ Emotion logged: {username} - {emotion_data['emotion']} ({emotion_data['intensity']:.2f})")
@@ -474,43 +489,15 @@ async def analyze_frame(
         except Exception as e:
             logger.error(f"Frame analysis error: {e}")
     
-    # Fallback: random emotion data
+    # Fallback response if no file
     emotions = ['happy', 'neutral', 'focused', 'stressed', 'tired']
-    content_types = ['Studying', 'Coding', 'Video', 'Reading']
-    
-    emotion_data = {
+    return {
         "emotion": random.choice(emotions),
         "intensity": round(random.uniform(0.5, 1.0), 2),
         "content": random.choice(content_types),
         "content_conf": round(random.uniform(0.7, 1.0), 2),
         "timestamp": datetime.now().isoformat()
     }
-    
-    try:
-        emotion_log = EmotionLog(
-            user_id=current_user.id,
-            username=username,
-            emotion=emotion_data["emotion"],
-            intensity=emotion_data["intensity"],
-            content_type=emotion_data["content"],
-            content_confidence=emotion_data["content_conf"],
-            probabilities="{}",
-            is_guest=is_guest
-        )
-        db.add(emotion_log)
-        
-        # Update user's current emotion
-        if not is_guest:
-            current_user.current_emotion = emotion_data["emotion"]
-            current_user.current_emotion_intensity = emotion_data["intensity"]
-            db.add(current_user)
-            
-        db.commit()
-    except Exception as e:
-        print(f"❌ Failed to save emotion log: {e}")
-        db.rollback()
-    
-    return emotion_data
 
 
 @app.get("/api/emotions/history")
@@ -698,7 +685,46 @@ def admin_get_audit(
             ]
         }
     }
-
+@app.get("/api/dashboard/status")
+def get_dashboard_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get current dashboard status"""
+    
+    is_guest = getattr(current_user, 'is_guest', False)
+    
+    if is_guest or current_user.id == 0:
+        return {
+            "current_emotion": None,
+            "current_emotion_intensity": None,
+            "current_content": None,
+            "status": "Idle",
+            "last_session": None
+        }
+    
+    # Get user's current state
+    user = db.query(User).filter(User.id == current_user.id).first()
+    
+    # Get last activity time
+    last_log = db.query(EmotionLog).filter(
+        EmotionLog.user_id == current_user.id
+    ).order_by(EmotionLog.created_at.desc()).first()
+    
+    # Determine status based on last activity
+    status = "Idle"
+    if user and user.last_activity:
+        time_diff = datetime.now(timezone.utc) - user.last_activity
+        if time_diff.total_seconds() < 60:  # Active within last minute
+            status = "Recording"
+    
+    return {
+        "current_emotion": user.current_emotion if user else None,
+        "current_emotion_intensity": user.current_emotion_intensity if user else None,
+        "current_content": user.current_content if user else None,
+        "status": status,
+        "last_session": last_log.created_at.isoformat() if last_log else None
+    }
 
 @app.get("/api/admin/stats")
 def admin_get_stats(

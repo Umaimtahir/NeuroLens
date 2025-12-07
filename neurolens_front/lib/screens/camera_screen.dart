@@ -33,8 +33,7 @@ class _CameraScreenState extends State<CameraScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final cameraProvider =
-    Provider.of<CameraProvider>(context, listen: false);
+    final cameraProvider = Provider.of<CameraProvider>(context, listen: false);
 
     if (state == AppLifecycleState.paused) {
       cameraProvider.pauseCamera();
@@ -44,8 +43,7 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Future<void> _initializeCamera() async {
-    final cameraProvider =
-    Provider.of<CameraProvider>(context, listen: false);
+    final cameraProvider = Provider.of<CameraProvider>(context, listen: false);
 
     if (cameraProvider.cameraPermissionGranted) {
       print('✅ Camera already has permission');
@@ -101,11 +99,8 @@ class _CameraScreenState extends State<CameraScreen>
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        final cameraProvider =
-        Provider.of<CameraProvider>(context, listen: false);
-
-        final analysisProvider =
-        Provider.of<AnalysisProvider>(context, listen: false);
+        final cameraProvider = Provider.of<CameraProvider>(context, listen: false);
+        final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
 
         cameraProvider.pauseCamera();
         analysisProvider.stopAnalysis();
@@ -114,147 +109,292 @@ class _CameraScreenState extends State<CameraScreen>
       },
       child: AppShell(
         currentRoute: 'Camera',
-        body:
-        Consumer2<CameraProvider, AnalysisProvider>(builder:
-            (context, cameraProvider, analysisProvider, _) {
-          if (_permissionDenied &&
-              !cameraProvider.cameraPermissionGranted) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
+        body: Consumer2<CameraProvider, AnalysisProvider>(
+          builder: (context, cameraProvider, analysisProvider, _) {
+            if (_permissionDenied && !cameraProvider.cameraPermissionGranted) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.videocam_off,
+                        size: 80,
+                        color: AppConstants.errorRed,
+                      ),
+                      const SizedBox(height: 24),
+                      Text(
+                        'Camera Access Denied',
+                        style: Theme.of(context).textTheme.displayMedium,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Camera permission is required.\n'
+                            'Please enable camera access to continue.',
+                        style: Theme.of(context).textTheme.bodyLarge,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 32),
+                      Wrap(
+                        spacing: 16,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _retryPermission,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 16,
+                              ),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.arrow_back),
+                            label: const Text('Go Back'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 16,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }
+
+            if (cameraProvider.controller == null ||
+                !cameraProvider.controller!.value.isInitialized) {
+              return Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Initializing camera...'),
+                  ],
+                ),
+              );
+            }
+
+            return Stack(
+              children: [
+                // Camera Preview
+                Column(
                   children: [
-                    Icon(
-                      Icons.videocam_off,
-                      size: 80,
-                      color: AppConstants.errorRed,
-                    ),
-                    const SizedBox(height: 24),
-                    Text(
-                      'Camera Access Denied',
-                      style: Theme.of(context)
-                          .textTheme
-                          .displayMedium,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Camera permission is required.\n'
-                          'Please enable camera access to continue.',
-                      style:
-                      Theme.of(context).textTheme.bodyLarge,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 32),
-                    Wrap(
-                      spacing: 16,
-                      alignment: WrapAlignment.center,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: _retryPermission,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Retry'),
-                          style: ElevatedButton.styleFrom(
-                            padding:
-                            const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 16,
-                            ),
+                    Expanded(
+                      child: Container(
+                        color: Colors.black,
+                        child: Center(
+                          child: AspectRatio(
+                            aspectRatio: cameraProvider.controller!.value.aspectRatio,
+                            child: CameraPreview(cameraProvider.controller!),
                           ),
                         ),
-                        OutlinedButton.icon(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.arrow_back),
-                          label: const Text('Go Back'),
-                          style: OutlinedButton.styleFrom(
-                            padding:
-                            const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 16,
+                      ),
+                    ),
+                    RecordingControl(
+                      isRecording: cameraProvider.isRecording,
+                      duration: cameraProvider.recordingDuration,
+                      onStartRecording: () async {
+                        await cameraProvider.startRecording();
+                        // ✅ Pass the shared camera controller
+                        analysisProvider.startAnalysis(
+                          sharedCamera: cameraProvider.controller,
+                        );
+                      },
+                      onStopRecording: () async {
+                        final path = await cameraProvider.stopRecording();
+                        analysisProvider.stopAnalysis();
+
+                        if (path != null && mounted) {
+                          final name = path.split('/').last;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Recording saved: $name'),
+                              backgroundColor: AppConstants.primaryTeal,
+                              duration: const Duration(seconds: 3),
                             ),
-                          ),
-                        ),
-                      ],
+                          );
+                        }
+                      },
                     ),
                   ],
                 ),
-              ),
-            );
-          }
 
-          if (cameraProvider.controller == null ||
-              !cameraProvider.controller!.value.isInitialized) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Initializing camera...'),
-                ],
-              ),
-            );
-          }
-
-          return Column(
-            children: [
-              Expanded(
-                child: Container(
-                  color: Colors.black,
-                  child: Center(
-                    child: AspectRatio(
-                      aspectRatio: cameraProvider
-                          .controller!.value.aspectRatio,
-                      child: CameraPreview(
-                          cameraProvider.controller!),
+                // ✅ LIVE EMOTION OVERLAY (Shows current emotion)
+                if (analysisProvider.currentEmotion != null)
+                  Positioned(
+                    top: 20,
+                    left: 20,
+                    child: Card(
+                      color: Colors.black.withOpacity(0.7),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.emoji_emotions,
+                                  color: _getEmotionColor(
+                                    analysisProvider.currentEmotion!.emotion,
+                                  ),
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  analysisProvider.currentEmotion!.emotion.toUpperCase(),
+                                  style: TextStyle(
+                                    color: _getEmotionColor(
+                                      analysisProvider.currentEmotion!.emotion,
+                                    ),
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Intensity: ${(analysisProvider.currentEmotion!.intensity * 100).toStringAsFixed(0)}%',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-              RecordingControl(
-                isRecording: cameraProvider.isRecording,
-                duration: cameraProvider.recordingDuration,
-                onStartRecording: () async {
-                  await cameraProvider.startRecording();
-                  analysisProvider.startAnalysis();
-                },
-                onStopRecording: () async {
-                  final path =
-                  await cameraProvider.stopRecording();
 
-                  analysisProvider.stopAnalysis();
-
-                  if (path != null && mounted) {
-                    final name = path.split('/').last;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Recording saved: $name'),
-                        backgroundColor:
-                        AppConstants.primaryTeal,
-                        duration:
-                        const Duration(seconds: 3),
+                // ✅ CONTENT TYPE OVERLAY (Shows detected content)
+                if (analysisProvider.currentContent != null)
+                  Positioned(
+                    top: 20,
+                    right: 20,
+                    child: Card(
+                      color: Colors.black.withOpacity(0.7),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.school,
+                                  color: Colors.amber,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  analysisProvider.currentContent!.category,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${(analysisProvider.currentContent!.confidence * 100).toStringAsFixed(0)}% confidence',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    );
-                  }
-                },
-              ),
-            ],
-          );
-        }),
+                    ),
+                  ),
+
+                // ✅ ANALYZING INDICATOR
+                if (analysisProvider.isAnalyzing)
+                  Positioned(
+                    bottom: 100,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.8),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(
+                              Icons.fiber_manual_record,
+                              color: Colors.white,
+                              size: 12,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'ANALYZING',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
       ),
     );
+  }
+
+  // ✅ Helper method to get emotion color
+  Color _getEmotionColor(String emotion) {
+    switch (emotion.toLowerCase()) {
+      case 'happy':
+      case 'excited':
+        return Colors.green;
+      case 'stressed':
+      case 'angry':
+        return Colors.red;
+      case 'focused':
+        return Colors.blue;
+      case 'tired':
+        return Colors.orange;
+      case 'sad':
+        return Colors.purple;
+      default:
+        return Colors.grey;
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
 
-    final cameraProvider =
-    Provider.of<CameraProvider>(context, listen: false);
-
-    final analysisProvider =
-    Provider.of<AnalysisProvider>(context, listen: false);
+    final cameraProvider = Provider.of<CameraProvider>(context, listen: false);
+    final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
 
     cameraProvider.pauseCamera();
     analysisProvider.stopAnalysis();

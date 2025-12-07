@@ -13,6 +13,10 @@ class ReportExportButton extends StatelessWidget {
   const ReportExportButton({Key? key, required this.reports}) : super(key: key);
 
   Future<void> _exportToCSV(BuildContext context) async {
+    // ✅ DECLARE PATH VARIABLES AT THE TOP
+    String fullPath = '';
+    String fileName = '';
+
     try {
       // Create detailed CSV content
       final buffer = StringBuffer();
@@ -70,16 +74,30 @@ class ReportExportButton extends StatelessWidget {
         }
       }
 
-      // Save to file
+      // ✅ GET DIRECTORY AND BUILD PATH
       final directory = await getApplicationDocumentsDirectory();
+      print('📁 Directory path: ${directory.path}');
+
       final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-      final file = File('${directory.path}/neurolens_report_$timestamp.csv');
+      fileName = 'neurolens_report_$timestamp.csv';
+
+      // ✅ BUILD FULL PATH EXPLICITLY
+      fullPath = '${directory.path}${Platform.pathSeparator}$fileName';
+      print('📄 Full path: $fullPath');
+
+      // Save to file
+      final file = File(fullPath);
       await file.writeAsString(buffer.toString());
+
+      // ✅ VERIFY FILE EXISTS
+      final exists = await file.exists();
+      print('✅ File exists: $exists');
+      print('✅ File path: ${file.path}');
 
       if (context.mounted) {
         showDialog(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (dialogContext) => AlertDialog(  // ✅ Use different context name
             title: const Row(
               children: [
                 Icon(Icons.check_circle, color: AppConstants.primaryTeal),
@@ -87,55 +105,95 @@ class ReportExportButton extends StatelessWidget {
                 Text('Report Exported'),
               ],
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Your detailed report has been saved successfully!'),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: SelectableText(
-                    file.path,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontFamily: 'monospace',
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Your detailed report has been saved successfully!'),
+                  const SizedBox(height: 16),
+
+                  // ✅ FILE LOCATION SECTION
+                  const Text(
+                    'File Location:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Report includes:',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppConstants.primaryTeal,
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey[400]!),
+                    ),
+                    child: SelectableText(
+                      fullPath.isNotEmpty ? fullPath : 'Path unavailable',  // ✅ SHOW PATH OR FALLBACK
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontFamily: 'Courier',
+                        color: Colors.black87,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                const Text('• Summary statistics'),
-                const Text('• Daily stress & focus levels'),
-                const Text('• Personalized recommendations'),
-              ],
+                  const SizedBox(height: 16),
+
+                  // ✅ FILE NAME SECTION
+                  Text(
+                    'File Name:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: AppConstants.primaryTeal,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    fileName.isNotEmpty ? fileName : 'Unknown',  // ✅ SHOW FILENAME OR FALLBACK
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ✅ REPORT INCLUDES SECTION
+                  Text(
+                    'Report includes:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppConstants.primaryTeal,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('• Summary statistics'),
+                  const Text('• Daily stress & focus levels'),
+                  const Text('• Personalized recommendations'),
+                ],
+              ),
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(dialogContext),
                 child: const Text('OK'),
               ),
             ],
           ),
         );
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ Export error: $e');
+      print('❌ Stack trace: $stackTrace');
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Export failed: $e'),
             backgroundColor: AppConstants.errorRed,
+            duration: const Duration(seconds: 5),
           ),
         );
       }

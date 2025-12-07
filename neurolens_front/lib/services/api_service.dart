@@ -40,6 +40,31 @@ class ApiService {
     return headers;
   }
 
+  // ✅ ADD THIS GET METHOD
+  Future<Map<String, dynamic>> get(String endpoint) async {
+    try {
+      print('📡 GET request to: $baseUrl$endpoint');
+
+      final response = await http.get(
+        Uri.parse('$baseUrl$endpoint'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['detail'] ?? 'Request failed');
+      }
+    } catch (e) {
+      print('❌ GET error: $e');
+      rethrow;
+    }
+  }
+
   /// Login
   Future<Map<String, dynamic>> login(String username, String password) async {
     try {
@@ -116,7 +141,7 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/api/reports/weekly'),
-        headers: headers,  // ✅ Changed from _headers
+        headers: headers,
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -137,7 +162,7 @@ class ApiService {
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/analyze/frame'),
-        headers: headers,  // ✅ Changed from _headers
+        headers: headers,
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -171,6 +196,101 @@ class ApiService {
       throw Exception('Guest login failed');
     } catch (e) {
       print('❌ Guest login error: $e');
+      rethrow;
+    }
+  }
+
+  // ✅ ADD THESE OPTIONAL METHODS FOR VERIFICATION & PASSWORD RESET
+
+  /// Verify email with code
+  Future<Map<String, dynamic>> verifyEmail(String email, String code) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/verify-email'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email,
+          'code': code,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['detail'] ?? 'Verification failed');
+      }
+    } catch (e) {
+      print('❌ Verification error: $e');
+      rethrow;
+    }
+  }
+
+  /// Resend verification code
+  Future<Map<String, dynamic>> resendVerification(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/resend-verification'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Failed to resend code');
+      }
+    } catch (e) {
+      print('❌ Resend verification error: $e');
+      rethrow;
+    }
+  }
+
+  /// Forgot password - request reset code
+  Future<Map<String, dynamic>> forgotPassword(String email) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/forgot-password'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Failed to send reset code');
+      }
+    } catch (e) {
+      print('❌ Forgot password error: $e');
+      rethrow;
+    }
+  }
+
+  /// Reset password with code
+  Future<Map<String, dynamic>> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/reset-password'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'email': email,
+          'code': code,
+          'new_password': newPassword,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['detail'] ?? 'Password reset failed');
+      }
+    } catch (e) {
+      print('❌ Reset password error: $e');
       rethrow;
     }
   }
