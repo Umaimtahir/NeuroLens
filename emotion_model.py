@@ -44,7 +44,7 @@ class EmotionDetector:
             except ImportError:
                 # Fall back to PyTorch
                 try:
-                    import torch
+                    import torch  # type: ignore[import-not-found]
                     self.model = torch.load(self.model_path)
                     self.model.eval()
                     logger.info("✅ Loaded PyTorch model")
