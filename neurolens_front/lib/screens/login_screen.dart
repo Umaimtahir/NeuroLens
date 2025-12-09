@@ -19,6 +19,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _isAccountLocked = false;
+  int _failedAttempts = 0;
+  int _remainingAttempts = 5;
+  String? _lockMessage;
 
   // Reduce rebuilds
   final _usernameFocusNode = FocusNode();
@@ -42,7 +46,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final success = await authProvider.login(
+    final result = await authProvider.loginWithDetails(
       _usernameController.text.trim(),
       _passwordController.text,
     );
@@ -51,17 +55,47 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = false);
 
-    if (success) {
+    if (result['success'] == true) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const DashboardScreen()),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Invalid username or password'),
-          backgroundColor: AppConstants.errorRed,
-        ),
-      );
+      // Check if account is locked
+      if (result['locked'] == true) {
+        setState(() {
+          _isAccountLocked = true;
+          _lockMessage = result['message'] ?? 'Account locked due to too many failed attempts';
+          _failedAttempts = result['failed_attempts'] ?? 5;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_lockMessage!),
+            backgroundColor: AppConstants.errorRed,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      } else {
+        // Update failed attempts counter
+        if (result['failed_attempts'] != null) {
+          setState(() {
+            _failedAttempts = result['failed_attempts'];
+            _remainingAttempts = result['remaining_attempts'] ?? (5 - _failedAttempts);
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Invalid credentials. $_remainingAttempts attempts remaining.'),
+              backgroundColor: AppConstants.errorRed,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Invalid username or password'),
+              backgroundColor: AppConstants.errorRed,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -145,25 +179,85 @@ class _LoginScreenState extends State<LoginScreen> {
                         },
                       ),
                       const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _handleLogin,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: _isLoading
-                                ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      
+                      // Show locked account warning if locked
+                      if (_isAccountLocked) ...[
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppConstants.errorRed.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppConstants.errorRed),
+                          ),
+                          child: Column(
+                            children: [
+                              const Icon(
+                                Icons.lock_outline,
+                                color: AppConstants.errorRed,
+                                size: 48,
                               ),
-                            )
-                                : const Text('Sign In'),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Account Locked',
+                                style: TextStyle(
+                                  color: AppConstants.errorRed,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                _lockMessage ?? 'Too many failed login attempts. Please reset your password to unlock your account.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ForgotPasswordScreen(),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.lock_reset),
+                            label: const Text('Reset Password to Unlock'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppConstants.primaryTeal,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        // Normal login button (only show when not locked)
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _handleLogin,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                                  : const Text('Sign In'),
+                            ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
 
                       // Forgot Password

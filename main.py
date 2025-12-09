@@ -393,11 +393,55 @@ def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db
                        ip_address=request.client.host if request.client else None)
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
-    if not EncryptionService.verify_password(credentials.password, user.password_hash):
-        log_audit_event(db, "LOGIN_FAILED", user_id=user.id, username=username_normalized,
-                       details="Invalid password", status="failed",
+    # Check if account is locked
+    if user.account_locked_until and user.account_locked_until > datetime.now(timezone.utc):
+        remaining_time = (user.account_locked_until - datetime.now(timezone.utc)).total_seconds()
+        log_audit_event(db, "LOGIN_BLOCKED", user_id=user.id, username=username_normalized,
+                       details=f"Account locked, {int(remaining_time)}s remaining", status="failed",
                        ip_address=request.client.host if request.client else None)
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(
+            status_code=423,  # Locked status code
+            detail=json.dumps({
+                "message": "Account locked due to too many failed attempts",
+                "locked": True,
+                "remaining_seconds": int(remaining_time),
+                "failed_attempts": user.failed_login_attempts
+            })
+        )
+    
+    if not EncryptionService.verify_password(credentials.password, user.password_hash):
+        # Increment failed attempts
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        
+        # Lock account after 5 failed attempts (lock for 30 minutes)
+        if user.failed_login_attempts >= 5:
+            user.account_locked_until = datetime.now(timezone.utc) + timedelta(minutes=30)
+            db.commit()
+            log_audit_event(db, "ACCOUNT_LOCKED", user_id=user.id, username=username_normalized,
+                           details=f"Account locked after {user.failed_login_attempts} failed attempts", status="failed",
+                           ip_address=request.client.host if request.client else None)
+            raise HTTPException(
+                status_code=423,
+                detail=json.dumps({
+                    "message": "Account locked due to too many failed attempts. Please reset your password.",
+                    "locked": True,
+                    "remaining_seconds": 1800,  # 30 minutes
+                    "failed_attempts": user.failed_login_attempts
+                })
+            )
+        
+        db.commit()
+        log_audit_event(db, "LOGIN_FAILED", user_id=user.id, username=username_normalized,
+                       details=f"Invalid password (attempt {user.failed_login_attempts}/5)", status="failed",
+                       ip_address=request.client.host if request.client else None)
+        raise HTTPException(
+            status_code=401, 
+            detail=json.dumps({
+                "message": "Invalid credentials",
+                "failed_attempts": user.failed_login_attempts,
+                "remaining_attempts": 5 - user.failed_login_attempts
+            })
+        )
     
     # Check if email is verified
     if not user.email_verified:
@@ -414,6 +458,11 @@ def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db
                        details="Account disabled", status="failed",
                        ip_address=request.client.host if request.client else None)
         raise HTTPException(status_code=403, detail="Account disabled")
+    
+    # Reset failed login attempts on successful login
+    user.failed_login_attempts = 0
+    user.account_locked_until = None
+    db.commit()
     
     token = create_access_token(data={"sub": username_normalized, "verified": True})
     
@@ -597,6 +646,9 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
         user.password_hash = EncryptionService.hash_password(request.new_password)
         user.reset_token = None
         user.reset_token_expiry = None
+        # Reset failed login attempts and unlock account
+        user.failed_login_attempts = 0
+        user.account_locked_until = None
         db.commit()
         
         username_display = EncryptionService.decrypt_data(user.username_encrypted)

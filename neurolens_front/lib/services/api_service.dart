@@ -142,6 +142,67 @@ class ApiService {
       rethrow;
     }
   }
+  
+  /// Login with detailed response for lockout handling
+  Future<Map<String, dynamic>> loginWithDetails(String username, String password) async {
+    try {
+      print('🔐 Logging in (with details): $username');
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/auth/login'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'username': username.toLowerCase().trim(),
+          'password': password,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      print('📥 Response status: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {'success': true, ...data};
+      } else if (response.statusCode == 423) {
+        // Account locked
+        try {
+          final errorDetail = jsonDecode(response.body)['detail'];
+          final lockInfo = jsonDecode(errorDetail);
+          return {
+            'success': false,
+            'locked': true,
+            'message': lockInfo['message'],
+            'failed_attempts': lockInfo['failed_attempts'],
+            'remaining_seconds': lockInfo['remaining_seconds'],
+          };
+        } catch (_) {
+          return {
+            'success': false,
+            'locked': true,
+            'message': 'Account locked due to too many failed attempts',
+          };
+        }
+      } else if (response.statusCode == 401) {
+        // Invalid credentials - check for attempt info
+        try {
+          final errorDetail = jsonDecode(response.body)['detail'];
+          final attemptInfo = jsonDecode(errorDetail);
+          return {
+            'success': false,
+            'message': attemptInfo['message'],
+            'failed_attempts': attemptInfo['failed_attempts'],
+            'remaining_attempts': attemptInfo['remaining_attempts'],
+          };
+        } catch (_) {
+          return {'success': false, 'message': 'Invalid credentials'};
+        }
+      } else {
+        return {'success': false, 'message': 'Login failed'};
+      }
+    } catch (e) {
+      print('❌ Login error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
 
   /// Signup - Initiates signup and sends verification code
   Future<Map<String, dynamic>> signup({

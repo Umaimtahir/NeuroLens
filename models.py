@@ -22,6 +22,10 @@ class User(Base):
     reset_token = Column(String(10), nullable=True)
     reset_token_expiry = Column(DateTime(timezone=True), nullable=True)
     
+    # Login attempt tracking (lockout after 5 failed attempts)
+    failed_login_attempts = Column(Integer, default=0, nullable=False)
+    account_locked_until = Column(DateTime(timezone=True), nullable=True)
+    
     # ✅ Current state tracking (ADD THESE)
     current_emotion = Column(String(50), nullable=True)
     current_emotion_intensity = Column(Float, nullable=True)

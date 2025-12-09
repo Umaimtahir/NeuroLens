@@ -35,6 +35,32 @@ class AuthProvider with ChangeNotifier {
       return false;
     }
   }
+  
+  /// Login with detailed response (for handling lockout)
+  Future<Map<String, dynamic>> loginWithDetails(String username, String password) async {
+    try {
+      final response = await _apiService.loginWithDetails(username, password);
+      
+      if (response['success'] == true) {
+        final user = UserModel.fromJson(response['user']);
+        final token = response['token'] as String;
+
+        _user = user.copyWith(token: token);
+        _isAuthenticated = true;
+
+        // Store token securely
+        await _secureStorage.write(key: AppConstants.tokenKey, value: token);
+        _apiService.setToken(token);
+
+        notifyListeners();
+      }
+      
+      return response;
+    } catch (e) {
+      print('Login error: $e');
+      return {'success': false, 'message': 'Login failed'};
+    }
+  }
 
   /// Signup - Initiates signup (sends verification code, doesn't create account yet)
   Future<bool> signup({
