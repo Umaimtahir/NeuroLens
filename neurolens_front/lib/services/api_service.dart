@@ -451,4 +451,122 @@ class ApiService {
       rethrow;
     }
   }
+  
+  // ==================== PROFILE UPDATE METHODS ====================
+  
+  /// Update profile (name, email, username)
+  Future<Map<String, dynamic>> updateProfile({
+    String? name,
+    String? email,
+    String? username,
+  }) async {
+    try {
+      print('📝 Updating profile...');
+      final Map<String, dynamic> body = {};
+      if (name != null) body['name'] = name;
+      if (email != null) body['email'] = email.toLowerCase().trim();
+      if (username != null) body['username'] = username.toLowerCase().trim();
+      
+      final response = await http.put(
+        Uri.parse('$baseUrl/api/profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 10));
+
+      print('📥 Response status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['detail'] ?? 'Profile update failed');
+      }
+    } catch (e) {
+      print('❌ Profile update error: $e');
+      rethrow;
+    }
+  }
+  
+  /// Verify email change with code
+  Future<Map<String, dynamic>> verifyProfileEmailUpdate(String code) async {
+    try {
+      print('🔐 Verifying email change...');
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/profile/verify-email'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'code': code}),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['detail'] ?? 'Verification failed');
+      }
+    } catch (e) {
+      print('❌ Email verification error: $e');
+      rethrow;
+    }
+  }
+  
+  /// Resend profile email verification code
+  Future<Map<String, dynamic>> resendProfileVerification() async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/profile/resend-verification'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        throw Exception('Failed to resend code');
+      }
+    } catch (e) {
+      print('❌ Resend verification error: $e');
+      rethrow;
+    }
+  }
+  
+  /// Change password
+  Future<Map<String, dynamic>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    try {
+      print('🔑 Changing password...');
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/profile/change-password'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({
+          'current_password': currentPassword,
+          'new_password': newPassword,
+          'confirm_password': confirmPassword,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['detail'] ?? 'Password change failed');
+      }
+    } catch (e) {
+      print('❌ Change password error: $e');
+      rethrow;
+    }
+  }
 }

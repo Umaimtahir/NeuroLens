@@ -33,6 +33,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: str = payload.get("sub")
+        user_id: int = payload.get("user_id")  # New: get user_id from token
         is_guest: bool = payload.get("is_guest", False)
         
         if username is None:
@@ -56,9 +57,15 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     except JWTError:
         raise credentials_exception
     
-    # Find real user using hash
-    username_hash = EncryptionService.hash_username(username)
-    user = db.query(User).filter(User.username_hash == username_hash).first()
+    # Try to find user by ID first (works even after username change)
+    user = None
+    if user_id:
+        user = db.query(User).filter(User.id == user_id).first()
+    
+    # Fallback to username hash for old tokens
+    if user is None:
+        username_hash = EncryptionService.hash_username(username)
+        user = db.query(User).filter(User.username_hash == username_hash).first()
     
     if user is None:
         raise credentials_exception

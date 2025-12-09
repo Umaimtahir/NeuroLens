@@ -5,10 +5,16 @@ import '../providers/auth_provider.dart';
 import '../widgets/app_shell.dart';
 import '../utils/constants.dart';
 import 'admin_dashboard_screen.dart';
+import 'edit_profile_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
 
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -61,6 +67,31 @@ class ProfileScreen extends StatelessWidget {
                     _buildInfoRow(context, 'User ID', user?.id.toString() ?? 'N/A'),
                     _buildInfoRow(context, 'Account Type', user?.isAdmin == true ? 'Admin Account' : 'Standard Account'),
                     _buildInfoRow(context, 'Username', '@${user?.username ?? 'N/A'}'),
+                    
+                    // Edit Profile Button (only for non-guests)
+                    if (!authProvider.isGuest) ...[
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                            );
+                            if (result == true) {
+                              // Refresh the profile screen
+                              setState(() {});
+                            }
+                          },
+                          icon: const Icon(Icons.edit),
+                          label: const Text('Edit Profile'),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

@@ -33,12 +33,18 @@ class UserModel {
     };
   }
 
-  UserModel copyWith({String? token}) {
+  UserModel copyWith({
+    int? id,
+    String? name,
+    String? email,
+    String? username,
+    String? token,
+  }) {
     return UserModel(
-      id: id,
-      name: name,
-      email: email,
-      username: username,
+      id: id ?? this.id,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      username: username ?? this.username,
       token: token ?? this.token,
     );
   }

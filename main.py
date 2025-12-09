@@ -13,7 +13,8 @@ from schemas import (
     LoginResponse, SignupResponse, ReportData,
     ForgotPasswordRequest, ResetPasswordRequest, VerifyResetCodeRequest,
     VerifyEmailRequest, ResendVerificationRequest,
-    InitiateSignupResponse, VerifySignupRequest
+    InitiateSignupResponse, VerifySignupRequest,
+    UpdateProfileRequest, VerifyProfileUpdateRequest, ChangePasswordRequest
 )
 from encryption import EncryptionService
 from auth import create_access_token, get_current_user
@@ -28,6 +29,10 @@ logger = logging.getLogger(__name__)
 # Temporary storage for pending signups (email verification before account creation)
 # Format: {email_hash: {"data": {...}, "code": "123456", "expiry": datetime}}
 pending_signups = {}
+
+# Temporary storage for pending profile updates (email verification before update)
+# Format: {user_id: {"updates": {...}, "new_email": "...", "code": "123456", "expiry": datetime}}
+pending_profile_updates = {}
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -231,8 +236,8 @@ def verify_signup(request: VerifySignupRequest, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"⚠️ Welcome email failed: {e}")
     
-    # Generate token (fully verified)
-    token = create_access_token(data={"sub": signup_data["username"], "verified": True})
+    # Generate token (fully verified) - include user_id for auth after username changes
+    token = create_access_token(data={"sub": signup_data["username"], "user_id": new_user.id, "verified": True})
     
     return SignupResponse(
         token=token,
@@ -326,7 +331,7 @@ def verify_email(request: VerifyEmailRequest, db: Session = Depends(get_db)):
         print(f"⚠️ Welcome email failed: {e}")
     
     username = EncryptionService.decrypt_data(user.username_encrypted)
-    token = create_access_token(data={"sub": username, "verified": True})
+    token = create_access_token(data={"sub": username, "user_id": user.id, "verified": True})
     
     return {
         "message": "Email verified successfully!",
@@ -464,7 +469,7 @@ def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db
     user.account_locked_until = None
     db.commit()
     
-    token = create_access_token(data={"sub": username_normalized, "verified": True})
+    token = create_access_token(data={"sub": username_normalized, "user_id": user.id, "verified": True})
     
     username_display = EncryptionService.decrypt_data(user.username_encrypted)
     email_display = EncryptionService.decrypt_data(user.email_encrypted)
@@ -511,6 +516,15 @@ def guest_login():
 @app.get("/api/auth/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
     """Get current user"""
+    # Handle guest users
+    if current_user.id == 0 or not current_user.email_encrypted:
+        return UserResponse(
+            id=0,
+            name="Guest User",
+            email="guest@neurolens.app",
+            username="guest"
+        )
+    
     return UserResponse(
         id=current_user.id,
         name=current_user.name,
@@ -669,6 +683,290 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
         log_audit_event(db, "PASSWORD_RESET_FAILED", username=username_normalized,
                        details=str(e), status="failed")
         raise HTTPException(status_code=500, detail="Password reset failed")
+
+
+# ==================== PROFILE UPDATE ENDPOINTS ====================
+
+@app.get("/api/profile")
+def get_profile(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get current user profile"""
+    
+    is_guest = getattr(current_user, 'is_guest', False)
+    if is_guest or current_user.id == 0:
+        return {
+            "id": 0,
+            "name": "Guest User",
+            "email": "guest@neurolens.app",
+            "username": "guest",
+            "is_guest": True
+        }
+    
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    username_display = EncryptionService.decrypt_data(user.username_encrypted)
+    email_display = EncryptionService.decrypt_data(user.email_encrypted)
+    
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": email_display,
+        "username": username_display,
+        "is_guest": False
+    }
+
+
+@app.put("/api/profile")
+def update_profile(
+    request: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update user profile (name, email, username).
+    If email is changed, sends verification code to new email.
+    """
+    
+    is_guest = getattr(current_user, 'is_guest', False)
+    if is_guest or current_user.id == 0:
+        raise HTTPException(status_code=403, detail="Guests cannot update profile")
+    
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    current_username = EncryptionService.decrypt_data(user.username_encrypted)
+    current_email = EncryptionService.decrypt_data(user.email_encrypted)
+    
+    updates_applied = []
+    email_change_pending = False
+    new_email = None
+    
+    # Check and update name
+    if request.name and request.name != user.name:
+        user.name = request.name
+        updates_applied.append("name")
+        print(f"📝 Updating name to: {request.name}")
+    
+    # Check and update username
+    if request.username and request.username.lower() != current_username.lower():
+        new_username = request.username.lower().strip()
+        new_username_hash = EncryptionService.hash_username(new_username)
+        
+        # Check if username already exists
+        existing_user = db.query(User).filter(
+            User.username_hash == new_username_hash,
+            User.id != user.id
+        ).first()
+        
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Username already taken")
+        
+        # Update username
+        user.username_hash = new_username_hash
+        user.username_encrypted = EncryptionService.encrypt_data(new_username)
+        updates_applied.append("username")
+        print(f"📝 Updating username to: {new_username}")
+    
+    # Check and update email (requires verification)
+    if request.email and request.email.lower() != current_email.lower():
+        new_email = request.email.lower().strip()
+        new_email_hash = EncryptionService.hash_email(new_email)
+        
+        # Check if email already exists
+        existing_user = db.query(User).filter(
+            User.email_hash == new_email_hash,
+            User.id != user.id
+        ).first()
+        
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        
+        # Generate verification code
+        verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        
+        # Store pending update
+        pending_profile_updates[user.id] = {
+            "new_email": new_email,
+            "new_email_hash": new_email_hash,
+            "new_email_encrypted": EncryptionService.encrypt_data(new_email),
+            "code": verification_code,
+            "expiry": datetime.now(timezone.utc) + timedelta(minutes=15)
+        }
+        
+        # Send verification email
+        try:
+            EmailService.send_verification_email(
+                to_email=new_email,
+                verification_code=verification_code,
+                username=user.name
+            )
+            print(f"📧 Verification email sent to: {new_email}")
+        except Exception as e:
+            print(f"❌ Email sending failed: {e}")
+        
+        email_change_pending = True
+    
+    # Commit name/username changes
+    if updates_applied:
+        db.commit()
+        log_audit_event(db, "PROFILE_UPDATED", user_id=user.id, username=current_username,
+                       details=json.dumps({"updated_fields": updates_applied}))
+    
+    # Get updated display values
+    updated_username = EncryptionService.decrypt_data(user.username_encrypted)
+    updated_email = EncryptionService.decrypt_data(user.email_encrypted)
+    
+    # Generate new token if username changed (so auth continues to work)
+    new_token = None
+    if "username" in updates_applied:
+        new_token = create_access_token(data={"sub": updated_username, "user_id": user.id, "verified": True})
+    
+    response = {
+        "message": "Profile updated successfully" if updates_applied else "No changes made",
+        "email_verification_required": email_change_pending,
+        "updates_applied": updates_applied,
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "email": updated_email,
+            "username": updated_username
+        }
+    }
+    
+    if new_token:
+        response["new_token"] = new_token
+    
+    return response
+
+
+@app.post("/api/profile/verify-email")
+def verify_profile_email_update(
+    request: VerifyProfileUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Verify email change with code"""
+    
+    is_guest = getattr(current_user, 'is_guest', False)
+    if is_guest or current_user.id == 0:
+        raise HTTPException(status_code=403, detail="Guests cannot update profile")
+    
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check for pending update
+    pending = pending_profile_updates.get(user.id)
+    if not pending:
+        raise HTTPException(status_code=400, detail="No pending email change found")
+    
+    # Check expiry
+    if pending["expiry"] < datetime.now(timezone.utc):
+        del pending_profile_updates[user.id]
+        raise HTTPException(status_code=400, detail="Verification code expired")
+    
+    # Verify code
+    if pending["code"] != request.code:
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+    
+    current_username = EncryptionService.decrypt_data(user.username_encrypted)
+    old_email = EncryptionService.decrypt_data(user.email_encrypted)
+    
+    # Apply email update
+    user.email_hash = pending["new_email_hash"]
+    user.email_encrypted = pending["new_email_encrypted"]
+    db.commit()
+    
+    # Clean up
+    del pending_profile_updates[user.id]
+    
+    log_audit_event(db, "EMAIL_CHANGED", user_id=user.id, username=current_username,
+                   details=json.dumps({"old_email": old_email, "new_email": pending["new_email"]}))
+    
+    return {
+        "message": "Email updated successfully",
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "email": pending["new_email"],
+            "username": current_username
+        }
+    }
+
+
+@app.post("/api/profile/resend-verification")
+def resend_profile_verification(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Resend verification code for pending email change"""
+    
+    is_guest = getattr(current_user, 'is_guest', False)
+    if is_guest or current_user.id == 0:
+        raise HTTPException(status_code=403, detail="Guests cannot update profile")
+    
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    pending = pending_profile_updates.get(user.id)
+    if not pending:
+        raise HTTPException(status_code=400, detail="No pending email change found")
+    
+    # Generate new code
+    verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+    pending["code"] = verification_code
+    pending["expiry"] = datetime.now(timezone.utc) + timedelta(minutes=15)
+    
+    try:
+        EmailService.send_verification_email(
+            to_email=pending["new_email"],
+            verification_code=verification_code,
+            username=user.name
+        )
+        return {"message": "Verification code resent"}
+    except Exception as e:
+        print(f"❌ Email sending failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send verification email")
+
+
+@app.post("/api/profile/change-password")
+def change_password(
+    request: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Change password (requires current password)"""
+    
+    is_guest = getattr(current_user, 'is_guest', False)
+    if is_guest or current_user.id == 0:
+        raise HTTPException(status_code=403, detail="Guests cannot change password")
+    
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    current_username = EncryptionService.decrypt_data(user.username_encrypted)
+    
+    # Verify current password
+    if not EncryptionService.verify_password(request.current_password, user.password_hash):
+        log_audit_event(db, "PASSWORD_CHANGE_FAILED", user_id=user.id, username=current_username,
+                       details="Invalid current password", status="failed")
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    # Update password
+    user.password_hash = EncryptionService.hash_password(request.new_password)
+    db.commit()
+    
+    log_audit_event(db, "PASSWORD_CHANGED", user_id=user.id, username=current_username,
+                   details="Password changed successfully")
+    
+    return {"message": "Password changed successfully"}
 
 
 # ==================== RECORDING STATE MANAGEMENT ====================

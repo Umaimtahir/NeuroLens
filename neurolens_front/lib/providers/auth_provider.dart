@@ -191,6 +191,88 @@ class AuthProvider with ChangeNotifier {
     _isAuthenticated = true;
     notifyListeners();
   }
+  
   /// Check if current user is guest
   bool get isGuest => _user?.id == 0;
+  
+  // ==================== PROFILE UPDATE METHODS ====================
+  
+  /// Update profile
+  Future<Map<String, dynamic>> updateProfile({
+    String? name,
+    String? email,
+    String? username,
+  }) async {
+    try {
+      final result = await _apiService.updateProfile(
+        name: name,
+        email: email,
+        username: username,
+      );
+      
+      // Update local user if successful
+      if (result['user'] != null) {
+        final updatedUser = result['user'] as Map<String, dynamic>;
+        _user = _user?.copyWith(
+          name: updatedUser['name'],
+          email: updatedUser['email'],
+          username: updatedUser['username'],
+        );
+        
+        // If username changed, we get a new token - update it
+        if (result['new_token'] != null) {
+          final newToken = result['new_token'] as String;
+          await _secureStorage.write(key: AppConstants.tokenKey, value: newToken);
+          _apiService.setToken(newToken);
+          _user = _user?.copyWith(token: newToken);
+        }
+        
+        notifyListeners();
+      }
+      
+      return result;
+    } catch (e) {
+      print('Profile update error: $e');
+      rethrow;
+    }
+  }
+  
+  /// Verify email change
+  Future<Map<String, dynamic>> verifyEmailUpdate(String code) async {
+    try {
+      final result = await _apiService.verifyProfileEmailUpdate(code);
+      
+      // Update local user if successful
+      if (result['user'] != null) {
+        final updatedUser = result['user'] as Map<String, dynamic>;
+        _user = _user?.copyWith(
+          email: updatedUser['email'],
+        );
+        notifyListeners();
+      }
+      
+      return result;
+    } catch (e) {
+      print('Email verification error: $e');
+      rethrow;
+    }
+  }
+  
+  /// Resend profile verification
+  Future<void> resendProfileVerification() async {
+    await _apiService.resendProfileVerification();
+  }
+  
+  /// Change password
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    await _apiService.changePassword(
+      currentPassword: currentPassword,
+      newPassword: newPassword,
+      confirmPassword: confirmPassword,
+    );
+  }
 }

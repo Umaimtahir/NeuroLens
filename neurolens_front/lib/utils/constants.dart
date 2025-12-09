@@ -8,6 +8,8 @@ class AppConstants {
   static const Color backgroundDark = Color(0xFF0A0E21);
   static const Color cardBackground = Color(0xFFFFFFFF);
   static const Color errorRed = Color(0xFFE57373);
+  static const Color successGreen = Color(0xFF81C784);
+  static const Color warningOrange = Color(0xFFFFB74D);
 
   // Typography
   static const double baseFontSize = 16.0;
