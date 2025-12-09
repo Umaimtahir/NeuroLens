@@ -688,7 +688,9 @@ async def analyze_frame(
     if not is_guest:
         username = EncryptionService.decrypt_data(current_user.username_encrypted)
     
-    content_types = ['Studying', 'Coding', 'Video', 'Reading']
+    # Content detection not implemented yet
+    content_placeholder = None  # Don't save mock content to database
+    content_conf_placeholder = None
     
     if file:
         try:
@@ -699,32 +701,31 @@ async def analyze_frame(
                 emotion_data = {
                     "emotion": result.get('emotion', 'neutral'),
                     "intensity": result.get('intensity', 0.5),
-                    "content": random.choice(content_types),
-                    "content_conf": round(random.uniform(0.7, 1.0), 2),
+                    "content": "Not Implemented",  # Display only - not saved
+                    "content_conf": 0.0,
                     "timestamp": datetime.now().isoformat(),
                     "face_detected": result.get('face_detected', False),
                     "probabilities": result.get('probabilities', {})
                 }
             else:
                 # Fallback if model not available
-                emotions = ['happy', 'neutral', 'focused', 'stressed', 'tired']
                 emotion_data = {
-                    "emotion": random.choice(emotions),
-                    "intensity": round(random.uniform(0.5, 1.0), 2),
-                    "content": random.choice(content_types),
-                    "content_conf": round(random.uniform(0.7, 1.0), 2),
+                    "emotion": "neutral",
+                    "intensity": 0.5,
+                    "content": "Not Implemented",  # Display only - not saved
+                    "content_conf": 0.0,
                     "timestamp": datetime.now().isoformat()
                 }
             
-            # Save to database
+            # Save to database (content is NULL since not implemented)
             try:
                 emotion_log = EmotionLog(
                     user_id=current_user.id,
                     username=username,
                     emotion=emotion_data["emotion"],
                     intensity=emotion_data["intensity"],
-                    content_type=emotion_data["content"],
-                    content_confidence=emotion_data["content_conf"],
+                    content_type=content_placeholder,  # NULL - not implemented
+                    content_confidence=content_conf_placeholder,  # NULL - not implemented
                     probabilities=json.dumps(emotion_data.get("probabilities", {})),
                     is_guest=is_guest
                 )
@@ -736,7 +737,7 @@ async def analyze_frame(
                     if user:
                         user.current_emotion = emotion_data["emotion"]
                         user.current_emotion_intensity = emotion_data["intensity"]
-                        user.current_content = emotion_data["content"]
+                        user.current_content = None  # NULL - content detection not implemented
                         user.last_activity = datetime.now(timezone.utc)
                         user.is_recording = True  # Mark as actively recording
                         db.add(user)
@@ -753,12 +754,11 @@ async def analyze_frame(
             logger.error(f"Frame analysis error: {e}")
     
     # Fallback response if no file
-    emotions = ['happy', 'neutral', 'focused', 'stressed', 'tired']
     return {
-        "emotion": random.choice(emotions),
-        "intensity": round(random.uniform(0.5, 1.0), 2),
-        "content": random.choice(content_types),
-        "content_conf": round(random.uniform(0.7, 1.0), 2),
+        "emotion": "neutral",
+        "intensity": 0.5,
+        "content": "Not Implemented",  # Display only
+        "content_conf": 0.0,
         "timestamp": datetime.now().isoformat()
     }
 

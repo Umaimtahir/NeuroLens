@@ -108,17 +108,20 @@ class EmotionDetector:
 
         except Exception as e:
             logger.error(f"Emotion prediction error: {e}")
-            return self._mock_prediction()
+            return self._fallback_prediction()
 
-    def _mock_prediction(self) -> Dict[str, Any]:
-        """Return a random mock prediction (for testing or missing model)."""
-        import random
-        emotion = random.choice(self.emotions)
+    def _fallback_prediction(self) -> Dict[str, Any]:
+        """Return a neutral fallback prediction when model is unavailable."""
         return {
-            'emotion': emotion,
-            'intensity': round(random.uniform(0.5, 0.95), 2),
-            'probabilities': {e: round(random.uniform(0.1, 0.3), 2) for e in self.emotions}
+            'emotion': 'neutral',
+            'intensity': 0.5,
+            'probabilities': {e: 0.14 for e in self.emotions}  # Equal distribution
         }
+    
+    def _mock_prediction(self) -> Dict[str, Any]:
+        """Alias for fallback prediction (deprecated - use _fallback_prediction)."""
+        return self._fallback_prediction()
+        
 
     def process_frame(self, frame_bytes: bytes) -> Dict[str, Any]:
         """Process a single video frame (bytes) and return emotion analysis."""
