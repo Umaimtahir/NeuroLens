@@ -393,6 +393,7 @@ def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db
     user = db.query(User).filter(User.username_hash == username_hash).first()
     
     if not user:
+        print(f"❌ LOGIN FAILED: User '{username_normalized}' not found")
         log_audit_event(db, "LOGIN_FAILED", username=username_normalized, 
                        details="User not found", status="failed",
                        ip_address=request.client.host if request.client else None)
@@ -401,6 +402,8 @@ def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db
     # Check if account is locked
     if user.account_locked_until and user.account_locked_until > datetime.now(timezone.utc):
         remaining_time = (user.account_locked_until - datetime.now(timezone.utc)).total_seconds()
+        remaining_mins = int(remaining_time / 60)
+        print(f"🔒 LOGIN BLOCKED: Account '{username_normalized}' is locked ({remaining_mins} mins remaining)")
         log_audit_event(db, "LOGIN_BLOCKED", user_id=user.id, username=username_normalized,
                        details=f"Account locked, {int(remaining_time)}s remaining", status="failed",
                        ip_address=request.client.host if request.client else None)
@@ -417,11 +420,13 @@ def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db
     if not EncryptionService.verify_password(credentials.password, user.password_hash):
         # Increment failed attempts
         user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        print(f"❌ LOGIN FAILED: Invalid password for '{username_normalized}' (attempt {user.failed_login_attempts}/5)")
         
         # Lock account after 5 failed attempts (lock for 30 minutes)
         if user.failed_login_attempts >= 5:
             user.account_locked_until = datetime.now(timezone.utc) + timedelta(minutes=30)
             db.commit()
+            print(f"🔒 ACCOUNT LOCKED: '{username_normalized}' locked for 30 minutes after {user.failed_login_attempts} failed attempts")
             log_audit_event(db, "ACCOUNT_LOCKED", user_id=user.id, username=username_normalized,
                            details=f"Account locked after {user.failed_login_attempts} failed attempts", status="failed",
                            ip_address=request.client.host if request.client else None)
@@ -475,6 +480,7 @@ def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db
     email_display = EncryptionService.decrypt_data(user.email_encrypted)
     
     # Log successful login
+    print(f"✅ LOGIN SUCCESS: User '{username_display}' logged in successfully")
     log_audit_event(db, "LOGIN_SUCCESS", user_id=user.id, username=username_display,
                    details=json.dumps({"email": email_display}),
                    ip_address=request.client.host if request.client else None)
@@ -798,6 +804,10 @@ def update_profile(
             "expiry": datetime.now(timezone.utc) + timedelta(minutes=15)
         }
         
+        # Print verification code to terminal for debugging
+        print(f"📧 Profile Email Change Verification Code: {verification_code}")
+        print(f"   New email: {new_email}")
+        
         # Send verification email
         try:
             EmailService.send_verification_email(
@@ -805,7 +815,7 @@ def update_profile(
                 verification_code=verification_code,
                 username=user.name
             )
-            print(f"📧 Verification email sent to: {new_email}")
+            print(f"✅ Verification email sent to: {new_email}")
         except Exception as e:
             print(f"❌ Email sending failed: {e}")
         
@@ -923,12 +933,17 @@ def resend_profile_verification(
     pending["code"] = verification_code
     pending["expiry"] = datetime.now(timezone.utc) + timedelta(minutes=15)
     
+    # Print new verification code to terminal
+    print(f"📧 Profile Email Change Verification Code (Resent): {verification_code}")
+    print(f"   Email: {pending['new_email']}")
+    
     try:
         EmailService.send_verification_email(
             to_email=pending["new_email"],
             verification_code=verification_code,
             username=user.name
         )
+        print(f"✅ Verification email resent to: {pending['new_email']}")
         return {"message": "Verification code resent"}
     except Exception as e:
         print(f"❌ Email sending failed: {e}")
@@ -1476,19 +1491,32 @@ def admin_get_audit_logs(
     """Admin: Get detailed audit logs with filtering"""
     from sqlalchemy import desc
     
+    print(f"📋 Audit logs request - action: {action}, status: {status}, limit: {limit}")
+    
     query = db.query(AuditLog)
     
     # Apply filters
     if action:
+        print(f"   Filtering by action: {action.upper()}")
         query = query.filter(AuditLog.action == action.upper())
     if status:
         query = query.filter(AuditLog.status == status)
     
     # Get total count
     total_count = query.count()
+    print(f"   Found {total_count} audit logs")
     
     # Get paginated results
     logs = query.order_by(desc(AuditLog.created_at)).offset(offset).limit(limit).all()
+    
+    def safe_parse_json(details_str):
+        """Safely parse JSON details, handling empty strings and invalid JSON"""
+        if not details_str or details_str.strip() == '':
+            return None
+        try:
+            return json.loads(details_str)
+        except (json.JSONDecodeError, TypeError):
+            return details_str  # Return as plain string if not valid JSON
     
     return {
         "total": total_count,
@@ -1500,7 +1528,7 @@ def admin_get_audit_logs(
                 "user_id": log.user_id,
                 "username": log.username,
                 "action": log.action,
-                "details": json.loads(log.details) if log.details else None,
+                "details": safe_parse_json(log.details),
                 "ip_address": log.ip_address,
                 "status": log.status,
                 "timestamp": log.created_at.isoformat() if log.created_at else None
@@ -1549,6 +1577,15 @@ def admin_get_audit_summary(
         AuditLog.status == "failed"
     ).order_by(AuditLog.created_at.desc()).limit(10).all()
     
+    def safe_parse_json(details_str):
+        """Safely parse JSON details, handling empty strings and invalid JSON"""
+        if not details_str or details_str.strip() == '':
+            return None
+        try:
+            return json.loads(details_str)
+        except (json.JSONDecodeError, TypeError):
+            return details_str  # Return as plain string if not valid JSON
+    
     return {
         "total_events": db.query(AuditLog).count(),
         "action_breakdown": {a: c for a, c in action_counts},
@@ -1559,7 +1596,7 @@ def admin_get_audit_summary(
                 "id": log.id,
                 "username": log.username,
                 "action": log.action,
-                "details": json.loads(log.details) if log.details else None,
+                "details": safe_parse_json(log.details),
                 "timestamp": log.created_at.isoformat() if log.created_at else None
             }
             for log in failed_actions

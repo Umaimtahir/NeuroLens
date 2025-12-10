@@ -17,9 +17,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
   Map<String, dynamic>? _auditLogs;
   Map<String, dynamic>? _auditSummary;
   bool _isLoading = true;
+  bool _isLoadingAuditLogs = false;
   final String _adminApiKey = "neurolens-admin-key-2025"; // Matches backend
   late TabController _tabController;
-  String? _selectedAction;
+  String? _selectedAction = ''; // Empty string means 'All Actions'
 
   @override
   void initState() {
@@ -71,6 +72,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
   }
 
   Future<void> _loadAuditLogs({String? action}) async {
+    // Show loading state
+    if (mounted) {
+      setState(() {
+        _isLoadingAuditLogs = true;
+      });
+    }
+    
     try {
       final headers = {
         'X-API-Key': _adminApiKey,
@@ -82,15 +90,26 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
         url += '&action=$action';
       }
       
+      print('📋 Loading audit logs from: $url'); // Debug
       final response = await http.get(Uri.parse(url), headers: headers);
+      print('📋 Audit logs response status: ${response.statusCode}'); // Debug
       
       if (response.statusCode == 200 && mounted) {
+        final data = jsonDecode(response.body);
+        print('📋 Audit logs count: ${data['total']}'); // Debug
         setState(() {
-          _auditLogs = jsonDecode(response.body);
+          _auditLogs = data;
+          _isLoadingAuditLogs = false;
         });
+      } else {
+        if (mounted) {
+          setState(() => _isLoadingAuditLogs = false);
+        }
       }
     } catch (e) {
+      print('❌ Error loading audit logs: $e'); // Debug
       if (mounted) {
+        setState(() => _isLoadingAuditLogs = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading audit logs: $e')),
         );
@@ -404,16 +423,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
               DropdownButton<String>(
                 value: _selectedAction,
                 hint: const Text('Filter by action'),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('All Actions')),
-                  const DropdownMenuItem(value: 'LOGIN_SUCCESS', child: Text('Successful Logins')),
-                  const DropdownMenuItem(value: 'LOGIN_FAILED', child: Text('Failed Logins')),
-                  const DropdownMenuItem(value: 'SIGNUP_SUCCESS', child: Text('Signups')),
-                  const DropdownMenuItem(value: 'PASSWORD_RESET', child: Text('Password Resets')),
+                items: const [
+                  DropdownMenuItem(value: '', child: Text('All Actions')),
+                  DropdownMenuItem(value: 'LOGIN_SUCCESS', child: Text('Successful Logins')),
+                  DropdownMenuItem(value: 'LOGIN_FAILED', child: Text('Failed Logins')),
+                  DropdownMenuItem(value: 'SIGNUP_SUCCESS', child: Text('Signups')),
+                  DropdownMenuItem(value: 'PASSWORD_RESET', child: Text('Password Resets')),
                 ],
-                onChanged: (value) {
+                onChanged: (value) async {
                   setState(() => _selectedAction = value);
-                  _loadAuditLogs(action: value);
+                  // Pass null for empty string to load all
+                  await _loadAuditLogs(action: (value == null || value.isEmpty) ? null : value);
                 },
               ),
             ],
@@ -421,14 +441,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> with Single
           const SizedBox(height: 16),
 
           // Audit Logs List
-          if (_auditLogs != null && _auditLogs!['logs'] != null)
+          if (_isLoadingAuditLogs)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+            )
+          else if (_auditLogs == null || _auditLogs!['logs'] == null || (_auditLogs!['logs'] as List).isEmpty)
             Card(
-              child: (_auditLogs!['logs'] as List).isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Center(child: Text('No audit logs found')),
-                    )
-                  : ListView.separated(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.history, size: 48, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      Text(
+                        _selectedAction != null && _selectedAction!.isNotEmpty 
+                            ? 'No ${_selectedAction!.replaceAll('_', ' ').toLowerCase()} events found' 
+                            : 'Nothing to display',
+                        style: const TextStyle(color: Colors.grey, fontSize: 16),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('No audit logs match your filter', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else
+            Card(
+              child: ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: (_auditLogs!['logs'] as List).length,
