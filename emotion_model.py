@@ -65,16 +65,39 @@ class EmotionDetector:
             face_cascade = cv2.CascadeClassifier(
                 cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
             )
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            
+            # Convert to grayscale if needed
+            if len(image.shape) == 3:
+                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            else:
+                gray = image
+            
+            # Try multiple detection parameters for better face detection
+            # First try with stricter parameters
             faces = face_cascade.detectMultiScale(
-                gray, scaleFactor=1.1, minNeighbors=5, minSize=(48, 48)
+                gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
             )
+            
+            # If no face found, try with more lenient parameters
             if len(faces) == 0:
+                faces = face_cascade.detectMultiScale(
+                    gray, scaleFactor=1.05, minNeighbors=3, minSize=(20, 20)
+                )
+            
+            # Still no face, try even more lenient
+            if len(faces) == 0:
+                faces = face_cascade.detectMultiScale(
+                    gray, scaleFactor=1.02, minNeighbors=2, minSize=(15, 15)
+                )
+            
+            if len(faces) == 0:
+                logger.debug("No face detected in frame")
                 return False, None
 
             # Pick the largest face
             x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
             face_roi = gray[y:y+h, x:x+w]
+            logger.debug(f"Face detected: {w}x{h} at ({x},{y})")
             return True, face_roi
 
         except Exception as e:
@@ -136,18 +159,47 @@ class EmotionDetector:
         try:
             nparr = np.frombuffer(frame_bytes, np.uint8)
             image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-            face_found, face_roi = self.detect_face(image)
-            if not face_found:
+            
+            if image is None:
+                logger.error("Failed to decode image from bytes")
                 return {
                     'success': False,
-                    'error': 'No face detected',
+                    'error': 'Failed to decode image',
                     'emotion': 'unknown',
                     'intensity': 0.0
                 }
+            
+            logger.info(f"📷 Processing frame: {image.shape}")
+
+            face_found, face_roi = self.detect_face(image)
+            if not face_found:
+                logger.warning("No face detected - using model prediction on full frame")
+                # Try to predict on the whole frame (resize to expected input)
+                try:
+                    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+                    # Use center crop for prediction when no face detected
+                    h, w = gray.shape
+                    min_dim = min(h, w)
+                    start_y = (h - min_dim) // 2
+                    start_x = (w - min_dim) // 2
+                    center_crop = gray[start_y:start_y+min_dim, start_x:start_x+min_dim]
+                    
+                    result = self.predict_emotion(center_crop)
+                    result.update({'success': True, 'face_detected': False})
+                    return result
+                except Exception as e:
+                    logger.error(f"Fallback prediction failed: {e}")
+                    return {
+                        'success': False,
+                        'error': 'No face detected',
+                        'emotion': 'neutral',
+                        'intensity': 0.5,
+                        'face_detected': False
+                    }
 
             result = self.predict_emotion(face_roi)
             result.update({'success': True, 'face_detected': True})
+            logger.info(f"✅ Emotion detected: {result['emotion']} ({result['intensity']:.2f})")
             return result
 
         except Exception as e:
@@ -155,8 +207,8 @@ class EmotionDetector:
             return {
                 'success': False,
                 'error': str(e),
-                'emotion': 'error',
-                'intensity': 0.0
+                'emotion': 'neutral',
+                'intensity': 0.5
             }
 
 

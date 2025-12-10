@@ -1045,9 +1045,11 @@ async def analyze_frame(
     if file:
         try:
             contents = await file.read()
+            print(f"📷 Received frame: {len(contents)} bytes from {username}")
             result = emotion_detector.process_frame(contents) if emotion_detector else None
             
             if result:
+                print(f"🧠 Model result: {result.get('emotion')} ({result.get('intensity', 0):.2f}) - Face detected: {result.get('face_detected', False)}")
                 emotion_data = {
                     "emotion": result.get('emotion', 'neutral'),
                     "intensity": result.get('intensity', 0.5),

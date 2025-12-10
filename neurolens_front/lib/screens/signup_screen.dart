@@ -89,6 +89,143 @@ class _SignupScreenState extends State<SignupScreen> {
     }
   }
 
+  void _showTermsAndConditions() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 600, maxHeight: 500),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppConstants.primaryTeal,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.description, color: Colors.white),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Terms & Conditions',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'NeuroLens Terms and Conditions',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Last Updated: November 18, 2025',
+                        style: TextStyle(
+                          fontStyle: FontStyle.italic,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      
+                      _TermsSection(
+                        title: '1. Acceptance of Terms',
+                        content: 'By accessing and using NeuroLens ("the App"), you agree to be bound by these Terms and Conditions. If you do not agree to these terms, please do not use the App.',
+                      ),
+                      
+                      _TermsSection(
+                        title: '2. Description of Service',
+                        content: 'NeuroLens is a mental well-being monitoring application that uses camera-based emotion detection technology to help users track their emotional states during digital content consumption.\n\nFeatures include:\n• Real-time emotion detection using facial recognition\n• Content type classification (Studying, Coding, Video, Reading)\n• Weekly reports and analytics\n• Personalized recommendations\n• Secure, encrypted data storage',
+                      ),
+                      
+                      _TermsSection(
+                        title: '3. Camera Usage',
+                        content: '• The App uses your device camera for emotion detection\n• Audio is NEVER recorded or captured\n• Camera access is required for real-time analysis\n• You can revoke camera permissions at any time',
+                      ),
+                      
+                      _TermsSection(
+                        title: '4. Privacy and Data Collection',
+                        content: 'Data We Collect:\n• Personal Information: Name, email address, username\n• Emotion Data: Facial emotion analysis results\n• Usage Data: Session duration, content types, timestamps\n\nData Storage:\n• All data is encrypted using AES-256 encryption\n• Data is stored securely on our servers\n• You can request data deletion at any time\n\nWe DO NOT sell your personal data to third parties.',
+                      ),
+                      
+                      _TermsSection(
+                        title: '5. User Responsibilities',
+                        content: 'You agree NOT to:\n• Use the App for illegal purposes\n• Attempt to breach security measures\n• Reverse engineer or modify the App\n• Upload malicious content or viruses\n• Impersonate other users',
+                      ),
+                      
+                      _TermsSection(
+                        title: '6. Medical Disclaimer',
+                        content: '• Emotion detection is AI-based and may not be 100% accurate\n• The App is for informational purposes only\n• NOT a substitute for professional medical advice\n• Do not rely solely on App results for health decisions\n• Consult healthcare professionals for mental health concerns',
+                      ),
+                      
+                      _TermsSection(
+                        title: '7. Account Termination',
+                        content: 'We may terminate or suspend your account if you violate these terms. You may delete your account at any time through the app settings.',
+                      ),
+                      
+                      _TermsSection(
+                        title: '8. Contact Information',
+                        content: 'For questions about these Terms & Conditions, contact us at:\nEmail: support@neurolens.app',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Footer
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() => _acceptTerms = true);
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppConstants.primaryTeal,
+                      ),
+                      child: const Text('I Accept', style: TextStyle(color: Colors.white)),
+                    ),
+                    const SizedBox(width: 12),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -265,14 +402,29 @@ class _SignupScreenState extends State<SignupScreen> {
                             activeColor: AppConstants.primaryTeal,
                           ),
                           Expanded(
-                            child: GestureDetector(
-                              onTap: () {
-                                setState(() => _acceptTerms = !_acceptTerms);
-                              },
-                              child: Text(
-                                'I accept the Terms & Conditions',
-                                style: Theme.of(context).textTheme.bodyMedium,
-                              ),
+                            child: Wrap(
+                              children: [
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() => _acceptTerms = !_acceptTerms);
+                                  },
+                                  child: Text(
+                                    'I accept the ',
+                                    style: Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => _showTermsAndConditions(),
+                                  child: Text(
+                                    'Terms & Conditions',
+                                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: AppConstants.primaryTeal,
+                                      decoration: TextDecoration.underline,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -339,6 +491,41 @@ class _SignupScreenState extends State<SignupScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// Helper widget for terms sections
+class _TermsSection extends StatelessWidget {
+  final String title;
+  final String content;
+
+  const _TermsSection({
+    required this.title,
+    required this.content,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            content,
+            style: const TextStyle(fontSize: 14, height: 1.5),
+          ),
+        ],
       ),
     );
   }
