@@ -9,6 +9,43 @@ class EmotionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Show "No face found" message if face not detected or emotion is "no_face"
+    if (!emotion.faceDetected || emotion.emotion.toLowerCase() == 'no_face') {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.face_retouching_off,
+                color: Colors.orange,
+                size: 48,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No Face Found',
+                style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Please position your face in front of the camera',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.grey,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24),

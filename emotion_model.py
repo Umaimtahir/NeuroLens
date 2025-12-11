@@ -173,29 +173,15 @@ class EmotionDetector:
 
             face_found, face_roi = self.detect_face(image)
             if not face_found:
-                logger.warning("No face detected - using model prediction on full frame")
-                # Try to predict on the whole frame (resize to expected input)
-                try:
-                    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
-                    # Use center crop for prediction when no face detected
-                    h, w = gray.shape
-                    min_dim = min(h, w)
-                    start_y = (h - min_dim) // 2
-                    start_x = (w - min_dim) // 2
-                    center_crop = gray[start_y:start_y+min_dim, start_x:start_x+min_dim]
-                    
-                    result = self.predict_emotion(center_crop)
-                    result.update({'success': True, 'face_detected': False})
-                    return result
-                except Exception as e:
-                    logger.error(f"Fallback prediction failed: {e}")
-                    return {
-                        'success': False,
-                        'error': 'No face detected',
-                        'emotion': 'neutral',
-                        'intensity': 0.5,
-                        'face_detected': False
-                    }
+                logger.warning("⚠️ No face detected in frame")
+                # Return clear "no face" response - don't guess!
+                return {
+                    'success': True,
+                    'error': 'No face detected',
+                    'emotion': 'no_face',
+                    'intensity': 0.0,
+                    'face_detected': False
+                }
 
             result = self.predict_emotion(face_roi)
             result.update({'success': True, 'face_detected': True})

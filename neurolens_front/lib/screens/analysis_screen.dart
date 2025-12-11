@@ -90,6 +90,19 @@ class AnalysisScreen extends StatelessWidget {
                         ];
                         final timeStr = DateFormat('HH:mm:ss').format(emotion.timestamp);
 
+                        // Handle no face detected case
+                        if (!emotion.faceDetected || emotion.emotion.toLowerCase() == 'no_face') {
+                          return ListTile(
+                            leading: const Icon(
+                              Icons.face_retouching_off,
+                              color: Colors.orange,
+                            ),
+                            title: const Text('NO FACE FOUND'),
+                            subtitle: Text(timeStr),
+                            trailing: const Icon(Icons.warning, color: Colors.orange, size: 20),
+                          );
+                        }
+
                         return ListTile(
                           leading: Icon(
                             Icons.emoji_emotions,

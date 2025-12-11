@@ -170,9 +170,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 _buildActionButton(
                   context,
-                  'Start Recording',
-                  Icons.videocam,
-                  Colors.teal,
+                  _status == 'Recording' ? 'Stop Recording' : 'Start Recording',
+                  _status == 'Recording' ? Icons.stop : Icons.videocam,
+                  _status == 'Recording' ? Colors.red : Colors.teal,
                       () => Navigator.pushNamed(context, '/camera'),
                 ),
                 _buildActionButton(

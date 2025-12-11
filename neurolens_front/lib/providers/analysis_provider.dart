@@ -91,13 +91,14 @@ class AnalysisProvider with ChangeNotifier {
         // Send frame to backend
         final result = await _sendFrameToAPI(bytes);
 
-        print('✅ Backend response: ${result['emotion']} (${result['intensity']})');
+        print('✅ Backend response: ${result['emotion']} (${result['intensity']}) - Face: ${result['face_detected']}');
 
         // Create models from API response
         final emotion = EmotionModel(
           emotion: result['emotion'] ?? 'neutral',
           intensity: (result['intensity'] ?? 0.5).toDouble(),
           timestamp: DateTime.now(),
+          faceDetected: result['face_detected'] ?? true,
         );
 
         final content = ContentModel(
@@ -167,12 +168,13 @@ class AnalysisProvider with ChangeNotifier {
       }
     } catch (e) {
       print('❌ API error: $e');
-      // Return fallback data
+      // Return fallback data with face_detected false
       return {
         'emotion': 'neutral',
         'intensity': 0.5,
         'content': 'Unknown',
         'content_conf': 0.5,
+        'face_detected': false,
       };
     }
   }
