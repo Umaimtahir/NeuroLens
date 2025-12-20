@@ -48,6 +48,90 @@ class _CameraScreenState extends State<CameraScreen>
         });
       }
     });
+    
+    // ✅ Set up callback for multiple faces detection
+    analysisProvider.onMultipleFacesDetected = (String message, int faceCount) {
+      if (mounted) {
+        _showMultipleFacesDialog(message, faceCount);
+      }
+    };
+  }
+  
+  /// Show error dialog when multiple faces are detected
+  void _showMultipleFacesDialog(String message, int faceCount) {
+    final cameraProvider = Provider.of<CameraProvider>(context, listen: false);
+    
+    // Stop recording if active
+    if (cameraProvider.isRecording) {
+      cameraProvider.stopRecording();
+    }
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        icon: const Icon(
+          Icons.people_alt,
+          size: 48,
+          color: Colors.orange,
+        ),
+        title: const Text('Multiple People Detected'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    '$faceCount faces detected',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      color: Colors.orange,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Reset the error state
+              Provider.of<AnalysisProvider>(context, listen: false)
+                  .resetMultipleFacesError();
+            },
+            child: const Text('OK'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              // Reset the error state and restart recording
+              final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
+              analysisProvider.resetMultipleFacesError();
+              _startRecording();
+            },
+            child: const Text('Try Again'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -471,6 +555,17 @@ class _CameraScreenState extends State<CameraScreen>
   void _startRecording() async {
     final cameraProvider = Provider.of<CameraProvider>(context, listen: false);
     final analysisProvider = Provider.of<AnalysisProvider>(context, listen: false);
+    
+    // ✅ Ensure callback is set before starting
+    analysisProvider.onMultipleFacesDetected = (String message, int faceCount) {
+      print('🚨 Callback triggered! Message: $message, Count: $faceCount');
+      if (mounted) {
+        _showMultipleFacesDialog(message, faceCount);
+      }
+    };
+    
+    // Reset any previous multiple faces error
+    analysisProvider.resetMultipleFacesError();
 
     await cameraProvider.startRecording();
     analysisProvider.startAnalysis(sharedCamera: cameraProvider.controller);

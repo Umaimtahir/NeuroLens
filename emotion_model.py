@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Dict, Tuple, Optional, Any
+from typing import Dict, Tuple, Optional, Any, List
 
 # Optional imports
 try:
@@ -30,8 +30,42 @@ class EmotionDetector:
         self.model_path: str = os.path.abspath(model_path)
         self.model: Optional[Any] = None
         self.emotions = ['angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutral']
+        
+        # Face detection - use DNN if available, fallback to Haar Cascade
+        self.face_detector = None
+        self.use_dnn = False
+        self._init_face_detector()
 
         self._load_model()
+    
+    def _init_face_detector(self) -> None:
+        """Initialize face detector - prefer DNN over Haar Cascade for better accuracy."""
+        if not CV2_AVAILABLE:
+            return
+            
+        try:
+            # Try to use OpenCV DNN face detector (more accurate for multiple faces)
+            # Check if we have the model files
+            dnn_proto = cv2.data.haarcascades.replace('haarcascades', '') + "deploy.prototxt"
+            dnn_model = cv2.data.haarcascades.replace('haarcascades', '') + "res10_300x300_ssd_iter_140000.caffemodel"
+            
+            if os.path.exists(dnn_proto) and os.path.exists(dnn_model):
+                self.face_detector = cv2.dnn.readNetFromCaffe(dnn_proto, dnn_model)
+                self.use_dnn = True
+                logger.info("✅ Using DNN face detector (more accurate)")
+            else:
+                # Fallback to Haar Cascade
+                self.face_detector = cv2.CascadeClassifier(
+                    cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+                )
+                self.use_dnn = False
+                logger.info("ℹ️ Using Haar Cascade face detector")
+        except Exception as e:
+            logger.warning(f"DNN init failed, using Haar Cascade: {e}")
+            self.face_detector = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            )
+            self.use_dnn = False
 
     def _load_model(self) -> None:
         """Load a pre-trained model (TensorFlow/Keras or PyTorch)."""
@@ -55,54 +89,91 @@ class EmotionDetector:
         except Exception as e:
             logger.error(f"Failed to load model: {e}. Using mock predictions.")
 
-    def detect_face(self, image: Any) -> Tuple[bool, Optional[Any]]:
-        """Detect the largest face in an image using OpenCV."""
+    def detect_face(self, image: Any) -> Tuple[str, Optional[Any], int]:
+        """
+        Detect faces in an image using OpenCV.
+        Returns: (status, face_roi, face_count)
+        - status: 'single_face', 'multiple_faces', 'no_face', 'error'
+        - face_roi: The face region of interest (only if single face)
+        - face_count: Number of faces detected
+        """
         if not CV2_AVAILABLE or image is None:
             logger.warning("OpenCV not available or image is None. Skipping face detection.")
-            return False, None
+            return 'error', None, 0
 
         try:
-            face_cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-            )
-            
             # Convert to grayscale if needed
             if len(image.shape) == 3:
                 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             else:
                 gray = image
             
-            # Try multiple detection parameters for better face detection
-            # First try with stricter parameters
-            faces = face_cascade.detectMultiScale(
-                gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
+            # Use multiple cascades for better detection
+            face_cascade_default = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            )
+            face_cascade_alt = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_frontalface_alt.xml'
+            )
+            face_cascade_alt2 = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_frontalface_alt2.xml'
             )
             
-            # If no face found, try with more lenient parameters
-            if len(faces) == 0:
-                faces = face_cascade.detectMultiScale(
-                    gray, scaleFactor=1.05, minNeighbors=3, minSize=(20, 20)
-                )
+            # ✅ Try multiple detectors and use the one that finds the most faces
+            all_faces = []
             
-            # Still no face, try even more lenient
-            if len(faces) == 0:
-                faces = face_cascade.detectMultiScale(
-                    gray, scaleFactor=1.02, minNeighbors=2, minSize=(15, 15)
-                )
+            # Detector 1: Default with lenient params
+            faces1 = face_cascade_default.detectMultiScale(
+                gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30)
+            )
+            if len(faces1) > 0:
+                all_faces.append(('default', faces1))
             
-            if len(faces) == 0:
-                logger.debug("No face detected in frame")
-                return False, None
-
-            # Pick the largest face
-            x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
-            face_roi = gray[y:y+h, x:x+w]
-            logger.debug(f"Face detected: {w}x{h} at ({x},{y})")
-            return True, face_roi
+            # Detector 2: Alt cascade (better for profile/angled faces)
+            faces2 = face_cascade_alt.detectMultiScale(
+                gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30)
+            )
+            if len(faces2) > 0:
+                all_faces.append(('alt', faces2))
+            
+            # Detector 3: Alt2 cascade
+            faces3 = face_cascade_alt2.detectMultiScale(
+                gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30)
+            )
+            if len(faces3) > 0:
+                all_faces.append(('alt2', faces3))
+            
+            # Use the detector that found the MOST faces (catches multiple people)
+            if all_faces:
+                best_detector, faces = max(all_faces, key=lambda x: len(x[1]))
+                face_count = len(faces)
+                logger.info(f"🔍 Best detector '{best_detector}': {face_count} face(s) found")
+            else:
+                # Try even more lenient as last resort
+                faces = face_cascade_default.detectMultiScale(
+                    gray, scaleFactor=1.05, minNeighbors=2, minSize=(20, 20)
+                )
+                face_count = len(faces)
+                logger.info(f"🔍 Lenient detection: {face_count} face(s) found")
+            
+            # Check for multiple faces FIRST - this is the priority
+            if face_count > 1:
+                logger.warning(f"⚠️ MULTIPLE FACES DETECTED: {face_count} people in frame!")
+                return 'multiple_faces', None, face_count
+            
+            # Single face found
+            if face_count == 1:
+                x, y, w, h = faces[0]
+                face_roi = gray[y:y+h, x:x+w]
+                logger.debug(f"Single face detected: {w}x{h} at ({x},{y})")
+                return 'single_face', face_roi, 1
+            
+            logger.debug("No face detected in frame")
+            return 'no_face', None, 0
 
         except Exception as e:
             logger.error(f"Face detection error: {e}")
-            return False, None
+            return 'error', None, 0
 
     def predict_emotion(self, face_image: Any) -> Dict[str, Any]:
         """Predict emotion from a grayscale face image."""
@@ -171,8 +242,23 @@ class EmotionDetector:
             
             logger.info(f"📷 Processing frame: {image.shape}")
 
-            face_found, face_roi = self.detect_face(image)
-            if not face_found:
+            status, face_roi, face_count = self.detect_face(image)
+            
+            # Handle multiple faces - stop detection and return error
+            if status == 'multiple_faces':
+                logger.warning(f"⚠️ Multiple people detected ({face_count}). Stopping emotion detection.")
+                return {
+                    'success': False,
+                    'error': 'multiple_faces',
+                    'error_message': f'Multiple people detected ({face_count}). Please ensure only one person is in the frame.',
+                    'emotion': 'error',
+                    'intensity': 0.0,
+                    'face_detected': True,
+                    'face_count': face_count,
+                    'stop_detection': True  # Signal frontend to stop and show popup
+                }
+            
+            if status == 'no_face':
                 logger.warning("⚠️ No face detected in frame")
                 # Return clear "no face" response - don't guess!
                 return {
@@ -180,11 +266,26 @@ class EmotionDetector:
                     'error': 'No face detected',
                     'emotion': 'no_face',
                     'intensity': 0.0,
+                    'face_detected': False,
+                    'face_count': 0
+                }
+            
+            if status == 'error':
+                return {
+                    'success': False,
+                    'error': 'Face detection error',
+                    'emotion': 'unknown',
+                    'intensity': 0.0,
                     'face_detected': False
                 }
 
+            # Single face detected - proceed with emotion prediction
             result = self.predict_emotion(face_roi)
-            result.update({'success': True, 'face_detected': True})
+            result.update({
+                'success': True, 
+                'face_detected': True,
+                'face_count': 1
+            })
             logger.info(f"✅ Emotion detected: {result['emotion']} ({result['intensity']:.2f})")
             return result
 

@@ -1072,7 +1072,12 @@ async def analyze_frame(
                     "content_conf": 0.0,
                     "timestamp": datetime.now().isoformat(),
                     "face_detected": result.get('face_detected', False),
-                    "probabilities": result.get('probabilities', {})
+                    "probabilities": result.get('probabilities', {}),
+                    # Pass through error fields for frontend
+                    "error": result.get('error'),
+                    "error_message": result.get('error_message'),
+                    "stop_detection": result.get('stop_detection', False),
+                    "face_count": result.get('face_count', 1)
                 }
             else:
                 # Fallback if model not available
@@ -1084,36 +1089,43 @@ async def analyze_frame(
                     "timestamp": datetime.now().isoformat()
                 }
             
-            # Save to database (content is NULL since not implemented)
-            try:
-                emotion_log = EmotionLog(
-                    user_id=current_user.id,
-                    username=username,
-                    emotion=emotion_data["emotion"],
-                    intensity=emotion_data["intensity"],
-                    content_type=content_placeholder,  # NULL - not implemented
-                    content_confidence=content_conf_placeholder,  # NULL - not implemented
-                    probabilities=json.dumps(emotion_data.get("probabilities", {})),
-                    is_guest=is_guest
-                )
-                db.add(emotion_log)
-                
-                # ✅ Update user's current state
-                if not is_guest:
-                    user = db.query(User).filter(User.id == current_user.id).first()
-                    if user:
-                        user.current_emotion = emotion_data["emotion"]
-                        user.current_emotion_intensity = emotion_data["intensity"]
-                        user.current_content = None  # NULL - content detection not implemented
-                        user.last_activity = datetime.now(timezone.utc)
-                        user.is_recording = True  # Mark as actively recording
-                        db.add(user)
-                
-                db.commit()
-                print(f"✅ Emotion logged: {username} - {emotion_data['emotion']} ({emotion_data['intensity']:.2f})")
-            except Exception as e:
-                print(f"❌ Failed to save emotion log: {e}")
-                db.rollback()
+            # ✅ Only save VALID emotions to database (skip error, no_face, unknown)
+            invalid_emotions = ['error', 'no_face', 'unknown']
+            should_save = emotion_data["emotion"] not in invalid_emotions
+            
+            if should_save:
+                # Save to database (content is NULL since not implemented)
+                try:
+                    emotion_log = EmotionLog(
+                        user_id=current_user.id,
+                        username=username,
+                        emotion=emotion_data["emotion"],
+                        intensity=emotion_data["intensity"],
+                        content_type=content_placeholder,  # NULL - not implemented
+                        content_confidence=content_conf_placeholder,  # NULL - not implemented
+                        probabilities=json.dumps(emotion_data.get("probabilities", {})),
+                        is_guest=is_guest
+                    )
+                    db.add(emotion_log)
+                    
+                    # ✅ Update user's current state only for valid emotions
+                    if not is_guest:
+                        user = db.query(User).filter(User.id == current_user.id).first()
+                        if user:
+                            user.current_emotion = emotion_data["emotion"]
+                            user.current_emotion_intensity = emotion_data["intensity"]
+                            user.current_content = None  # NULL - content detection not implemented
+                            user.last_activity = datetime.now(timezone.utc)
+                            user.is_recording = True  # Mark as actively recording
+                            db.add(user)
+                    
+                    db.commit()
+                    print(f"✅ Emotion logged: {username} - {emotion_data['emotion']} ({emotion_data['intensity']:.2f})")
+                except Exception as e:
+                    print(f"❌ Failed to save emotion log: {e}")
+                    db.rollback()
+            else:
+                print(f"⏭️ Skipping database save for invalid emotion: {emotion_data['emotion']}")
             
             return emotion_data
             

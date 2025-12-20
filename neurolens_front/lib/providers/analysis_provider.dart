@@ -21,6 +21,14 @@ class AnalysisProvider with ChangeNotifier {
   Timer? _analysisTimer;
   bool _isAnalyzing = false;
   CameraController? _cameraController;  // Reference to shared camera
+  
+  // Multiple faces detection
+  bool _multipleFacesDetected = false;
+  int _detectedFaceCount = 0;
+  String? _multipleFacesError;
+  
+  // Callback for showing error popup (set by UI)
+  Function(String message, int faceCount)? onMultipleFacesDetected;
 
   EmotionModel? get currentEmotion => _currentEmotion;
   ContentModel? get currentContent => _currentContent;
@@ -28,6 +36,9 @@ class AnalysisProvider with ChangeNotifier {
   List<ContentModel> get contentHistory => _contentHistory;
   bool get isAnalyzing => _isAnalyzing;
   CameraController? get cameraController => _cameraController;
+  bool get multipleFacesDetected => _multipleFacesDetected;
+  int get detectedFaceCount => _detectedFaceCount;
+  String? get multipleFacesError => _multipleFacesError;
   
   /// Access notification service for UI binding
   NotificationService get notificationService => _notificationService;
@@ -90,6 +101,59 @@ class AnalysisProvider with ChangeNotifier {
 
         // Send frame to backend
         final result = await _sendFrameToAPI(bytes);
+        
+        // ✅ Debug: Print full response
+        print('📥 Full API response: $result');
+        
+        // ✅ Check for multiple faces error - check multiple conditions
+        final errorType = result['error']?.toString();
+        final stopDetection = result['stop_detection'];
+        final emotionType = result['emotion']?.toString();
+        
+        print('🔍 Checking: error=$errorType, emotion=$emotionType, stop_detection=$stopDetection');
+        
+        // Check if multiple faces detected (any of these conditions)
+        final isMultipleFaces = errorType == 'multiple_faces' || 
+                                stopDetection == true || 
+                                emotionType == 'error';
+        
+        if (isMultipleFaces) {
+          final faceCount = result['face_count'] ?? 2;
+          final errorMessage = result['error_message']?.toString() ?? 
+              'Multiple people detected ($faceCount). Please ensure only one person is in the frame.';
+          
+          print('🚨 MULTIPLE FACES DETECTED: $faceCount people - STOPPING!');
+          
+          _multipleFacesDetected = true;
+          _detectedFaceCount = faceCount is int ? faceCount : 2;
+          _multipleFacesError = errorMessage;
+          
+          // Stop analysis FIRST
+          _analysisTimer?.cancel();
+          _analysisTimer = null;
+          _isAnalyzing = false;
+          
+          // Trigger the callback to show popup in UI
+          if (onMultipleFacesDetected != null) {
+            print('📢 Triggering popup callback...');
+            onMultipleFacesDetected!(errorMessage, _detectedFaceCount);
+          } else {
+            print('⚠️ WARNING: onMultipleFacesDetected callback is NULL!');
+          }
+          
+          notifyListeners();
+          
+          // Now do async cleanup
+          try {
+            await _apiService.post('/api/recording/stop');
+            print('✅ Backend notified: recording stopped');
+          } catch (e) {
+            print('⚠️ Failed to notify backend: $e');
+          }
+          _notificationService.endSession();
+          
+          return; // Exit the timer callback
+        }
 
         print('✅ Backend response: ${result['emotion']} (${result['intensity']}) - Face: ${result['face_detected']}');
 
@@ -198,6 +262,14 @@ class AnalysisProvider with ChangeNotifier {
     // ✅ End notification session and generate session summary
     _notificationService.endSession();
     
+    notifyListeners();
+  }
+  
+  /// Reset multiple faces error state
+  void resetMultipleFacesError() {
+    _multipleFacesDetected = false;
+    _detectedFaceCount = 0;
+    _multipleFacesError = null;
     notifyListeners();
   }
 
