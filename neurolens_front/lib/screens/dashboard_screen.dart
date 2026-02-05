@@ -30,8 +30,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _loadDashboardData();
 
-    // Refresh every 5 seconds while on dashboard
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    // Refresh every 3 seconds - balanced between responsiveness and server load
+    _refreshTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       _loadDashboardData();
     });
   }
@@ -44,7 +44,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadDashboardData() async {
     try {
+      // Ensure we have the token from AuthProvider
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final token = authProvider.user?.token;
+      if (token != null) {
+        _apiService.setToken(token);
+      } else {
+        print('⚠️ Dashboard: No token available!');
+      }
+      
+      print('📡 Dashboard: Fetching status...');
       final response = await _apiService.get('/api/dashboard/status');
+      
+      // Debug: print received data
+      print('📊 Dashboard received: emotion=${response['current_emotion']}, content=${response['current_content']}, status=${response['status']}');
 
       if (mounted) {
         setState(() {

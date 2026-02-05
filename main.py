@@ -24,6 +24,38 @@ from emotion_model import emotion_detector
 from terms_and_conditions import TERMS_AND_CONDITIONS, PRIVACY_POLICY
 from fastapi import Header
 
+# Content Classification - Use lightweight Windows API detection (fast, no ML)
+content_analyzer = None
+CONTENT_CLASSIFIER_AVAILABLE = False
+windows_api = None
+
+def get_fast_content_detector():
+    """Get fast Windows API-based content detector (no ML models)"""
+    global windows_api
+    if windows_api is None:
+        try:
+            from screen_classifer import WindowsAPI
+            windows_api = WindowsAPI()
+            print("✅ Fast content detector (Windows API) loaded!")
+        except Exception as e:
+            print(f"⚠️ Fast content detector not available: {e}")
+    return windows_api
+
+def get_content_analyzer():
+    """Lazy load the full content analyzer (heavy ML models) - use sparingly"""
+    global content_analyzer, CONTENT_CLASSIFIER_AVAILABLE
+    if content_analyzer is None and not CONTENT_CLASSIFIER_AVAILABLE:
+        try:
+            from screen_classifer import HybridAnalyzer
+            print("🔄 Loading Full Content Classifier (ML models)...")
+            content_analyzer = HybridAnalyzer(enable_ocr=False)
+            CONTENT_CLASSIFIER_AVAILABLE = True
+            print("✅ Full Content Classifier loaded!")
+        except Exception as e:
+            print(f"⚠️ Full Content Classifier not available: {e}")
+            CONTENT_CLASSIFIER_AVAILABLE = False
+    return content_analyzer
+
 logger = logging.getLogger(__name__)
 
 # Temporary storage for pending signups (email verification before account creation)
@@ -1053,9 +1085,37 @@ async def analyze_frame(
     if not is_guest:
         username = EncryptionService.decrypt_data(current_user.username_encrypted)
     
-    # Content detection not implemented yet
-    content_placeholder = None  # Don't save mock content to database
-    content_conf_placeholder = None
+    # Content Classification using Fast Windows API (no ML, instant)
+    content_result = None
+    content_type = None
+    content_confidence = None
+    content_details = {}
+    
+    # Use fast Windows API detector for real-time frame analysis
+    fast_detector = get_fast_content_detector()
+    if fast_detector:
+        try:
+            content_result = fast_detector.categorize_from_window()
+            content_type = content_result.get('category', 'OTHER')
+            # Convert confidence string to float
+            confidence_map = {'Very High': 0.95, 'High': 0.80, 'Medium': 0.60, 'Low': 0.40}
+            content_confidence = confidence_map.get(content_result.get('confidence', 'Low'), 0.40)
+            content_details = {
+                'app_name': content_result.get('app', ''),
+                'window_title': content_result.get('title', '')[:100],
+                'activity': 'DETECTED',  # Fast mode doesn't classify activity
+                'activity_emoji': content_result.get('emoji', '🏷️'),
+                'productivity': 'NEUTRAL',  # Fast mode doesn't classify productivity
+                'productivity_emoji': '➖',
+                'sentiment': 'NEUTRAL',
+                'sentiment_emoji': '😐',
+                'visual_description': '',
+            }
+            print(f"📊 Content (fast): {content_type} - {content_result.get('app', 'unknown')}")
+        except Exception as e:
+            print(f"⚠️ Content detection failed: {e}")
+            content_type = None
+            content_confidence = None
     
     if file:
         try:
@@ -1068,8 +1128,9 @@ async def analyze_frame(
                 emotion_data = {
                     "emotion": result.get('emotion', 'neutral'),
                     "intensity": result.get('intensity', 0.5),
-                    "content": "Not Implemented",  # Display only - not saved
-                    "content_conf": 0.0,
+                    "content": content_type or "UNKNOWN",
+                    "content_conf": content_confidence or 0.0,
+                    "content_details": content_details,
                     "timestamp": datetime.now().isoformat(),
                     "face_detected": result.get('face_detected', False),
                     "probabilities": result.get('probabilities', {}),
@@ -1084,8 +1145,9 @@ async def analyze_frame(
                 emotion_data = {
                     "emotion": "neutral",
                     "intensity": 0.5,
-                    "content": "Not Implemented",  # Display only - not saved
-                    "content_conf": 0.0,
+                    "content": content_type or "UNKNOWN",
+                    "content_conf": content_confidence or 0.0,
+                    "content_details": content_details,
                     "timestamp": datetime.now().isoformat()
                 }
             
@@ -1094,15 +1156,15 @@ async def analyze_frame(
             should_save = emotion_data["emotion"] not in invalid_emotions
             
             if should_save:
-                # Save to database (content is NULL since not implemented)
+                # Save to database with content classification
                 try:
                     emotion_log = EmotionLog(
                         user_id=current_user.id,
                         username=username,
                         emotion=emotion_data["emotion"],
                         intensity=emotion_data["intensity"],
-                        content_type=content_placeholder,  # NULL - not implemented
-                        content_confidence=content_conf_placeholder,  # NULL - not implemented
+                        content_type=content_type,  # Screen classifier result
+                        content_confidence=content_confidence,  # Screen classifier confidence
                         probabilities=json.dumps(emotion_data.get("probabilities", {})),
                         is_guest=is_guest
                     )
@@ -1114,10 +1176,10 @@ async def analyze_frame(
                         if user:
                             user.current_emotion = emotion_data["emotion"]
                             user.current_emotion_intensity = emotion_data["intensity"]
-                            user.current_content = None  # NULL - content detection not implemented
+                            user.current_content = content_type  # Screen classifier result
                             user.last_activity = datetime.now(timezone.utc)
                             user.is_recording = True  # Mark as actively recording
-                            db.add(user)
+                            print(f"📝 User update: emotion={user.current_emotion}, content={content_type}, is_recording={user.is_recording}")
                     
                     db.commit()
                     print(f"✅ Emotion logged: {username} - {emotion_data['emotion']} ({emotion_data['intensity']:.2f})")
@@ -1132,13 +1194,127 @@ async def analyze_frame(
         except Exception as e:
             logger.error(f"Frame analysis error: {e}")
     
-    # Fallback response if no file
+    # Fallback response if no file - still return content classification
     return {
         "emotion": "neutral",
         "intensity": 0.5,
-        "content": "Not Implemented",  # Display only
-        "content_conf": 0.0,
+        "content": content_type or "UNKNOWN",
+        "content_conf": content_confidence or 0.0,
+        "content_details": content_details,
         "timestamp": datetime.now().isoformat()
+    }
+
+
+@app.get("/api/analyze/content")
+async def analyze_content_only(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Analyze screen content only (without emotion detection).
+    Uses the Screen Classifier to detect:
+    - App/Website category (200+ apps)
+    - Activity type (CODING, READING, WATCHING, etc.)
+    - Productivity level (PRODUCTIVE, NEUTRAL, UNPRODUCTIVE)
+    - Sentiment analysis
+    - OCR text extraction
+    - Language detection & translation
+    """
+    
+    is_guest = getattr(current_user, 'is_guest', False)
+    username = getattr(current_user, 'username', 'guest')
+    
+    if not is_guest:
+        username = EncryptionService.decrypt_data(current_user.username_encrypted)
+    
+    # Try to get content analyzer (lazy load)
+    analyzer = get_content_analyzer()
+    if not analyzer:
+        return {
+            "status": "unavailable",
+            "message": "Content classifier not available",
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    try:
+        result = analyzer.analyze()
+        
+        # Convert confidence string to float
+        confidence_map = {'Very High': 0.95, 'High': 0.80, 'Medium': 0.60, 'Low': 0.40}
+        confidence = confidence_map.get(result.get('confidence', 'Low'), 0.40)
+        
+        response = {
+            "status": "success",
+            "app_name": result.get('app_name', ''),
+            "window_title": result.get('window_title', ''),
+            "visual_description": result.get('visual_description', ''),
+            "ocr_text": result.get('ocr_text', ''),
+            "category": result.get('category', 'OTHER'),
+            "category_emoji": result.get('emoji', '🏷️'),
+            "confidence": confidence,
+            "confidence_level": result.get('confidence', 'Low'),
+            "analysis_source": result.get('analysis_source', 'unknown'),
+            "language": {
+                "detected": result.get('original_language', 'English'),
+                "was_translated": result.get('was_translated', False),
+                "translated_title": result.get('translated_title')
+            },
+            "sentiment": {
+                "label": result.get('sentiment', 'NEUTRAL'),
+                "score": result.get('sentiment_score', 0.5),
+                "emoji": result.get('sentiment_emoji', '😐')
+            },
+            "activity": {
+                "type": result.get('activity', 'UNKNOWN'),
+                "emoji": result.get('activity_emoji', '🏷️'),
+                "confidence": result.get('activity_confidence', 'Low')
+            },
+            "productivity": {
+                "classification": result.get('productivity', 'NEUTRAL'),
+                "emoji": result.get('productivity_emoji', '➖'),
+                "confidence": result.get('productivity_confidence', 'Low'),
+                "reason": result.get('productivity_reason', '')
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        print(f"📊 Content analyzed for {username}: {result.get('category')} - {result.get('activity')}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Content analysis error: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+
+@app.get("/api/content/status")
+def get_content_classifier_status():
+    """Check if the content classifier is available and its capabilities"""
+    return {
+        "available": CONTENT_CLASSIFIER_AVAILABLE,
+        "features": {
+            "window_detection": True,
+            "visual_classification": CONTENT_CLASSIFIER_AVAILABLE,
+            "ocr": CONTENT_CLASSIFIER_AVAILABLE,
+            "sentiment_analysis": CONTENT_CLASSIFIER_AVAILABLE,
+            "language_detection": CONTENT_CLASSIFIER_AVAILABLE,
+            "activity_classification": CONTENT_CLASSIFIER_AVAILABLE,
+            "productivity_scoring": CONTENT_CLASSIFIER_AVAILABLE
+        },
+        "supported_categories": [
+            "CODING/DEVELOPMENT", "VIDEO/STREAMING", "SOCIAL MEDIA", "GAMING",
+            "DOCUMENT/PRODUCTIVITY", "COMMUNICATION", "MUSIC", "IMAGE/DESIGN",
+            "FILE MANAGEMENT", "NEWS", "EDUCATION", "SHOPPING", "FINANCE",
+            "AI ASSISTANT", "DATABASE", "DEVOPS", "API TESTING", "SYSTEM", "UTILITIES"
+        ],
+        "supported_activities": [
+            "WRITING", "READING", "WATCHING", "CODING", "BROWSING", "GAMING",
+            "DESIGNING", "COMMUNICATING", "LISTENING", "SEARCHING", "SHOPPING", "LEARNING"
+        ],
+        "apps_database": "200+ apps and websites"
     }
 
 
@@ -1368,7 +1544,7 @@ def get_dashboard_status(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get current dashboard status"""
+    """Get current dashboard status - OPTIMIZED for high-frequency polling"""
     
     is_guest = getattr(current_user, 'is_guest', False)
     
@@ -1382,69 +1558,53 @@ def get_dashboard_status(
             "session_summary": None
         }
     
-    # Get user's current state
-    user = db.query(User).filter(User.id == current_user.id).first()
-    
-    # Get last emotion log
-    last_log = db.query(EmotionLog).filter(
-        EmotionLog.user_id == current_user.id
-    ).order_by(EmotionLog.created_at.desc()).first()
-    
-    # Determine status based on is_recording flag (not time-based)
-    status = "Idle"
-    is_recording = False
-    if user:
-        is_recording = getattr(user, 'is_recording', False)
+    try:
+        # Use a single efficient query to get both user and last log
+        # Don't use db.expire_all() - it causes extra queries
+        from sqlalchemy.orm import joinedload
+        
+        user = db.query(User).filter(User.id == current_user.id).first()
+        
+        # Get only the LATEST emotion log (limit 1 - very fast)
+        last_log = db.query(EmotionLog).filter(
+            EmotionLog.user_id == current_user.id
+        ).order_by(EmotionLog.created_at.desc()).limit(1).first()
+        
+        # Determine status
+        is_recording = getattr(user, 'is_recording', False) if user else False
         status = "Recording" if is_recording else "Idle"
-    
-    # If recording, show current real-time data
-    # If idle, show last recorded session data
-    if is_recording:
-        emotion = user.current_emotion if user else None
-        emotion_intensity = user.current_emotion_intensity if user else None
-        content = user.current_content if user else None
-    else:
-        # Show last recorded data when idle
-        emotion = last_log.emotion if last_log else None
-        emotion_intensity = last_log.intensity if last_log else None
-        content = last_log.content_type if last_log else (user.current_content if user else None)
-    
-    # Get session summary for today
-    from sqlalchemy import func
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    today_logs = db.query(EmotionLog).filter(
-        EmotionLog.user_id == current_user.id,
-        EmotionLog.created_at >= today_start
-    ).all()
-    
-    session_summary = None
-    if today_logs:
-        # Calculate emotion distribution for today
-        emotion_counts = {}
-        total_intensity = 0
-        for log in today_logs:
-            emotion_counts[log.emotion] = emotion_counts.get(log.emotion, 0) + 1
-            total_intensity += log.intensity or 0.5
         
-        dominant_emotion = max(emotion_counts, key=emotion_counts.get) if emotion_counts else None
-        avg_intensity = total_intensity / len(today_logs) if today_logs else 0
+        # Get emotion/content from last_log (most reliable source)
+        if last_log:
+            emotion = last_log.emotion
+            emotion_intensity = last_log.intensity
+            content = last_log.content_type
+        else:
+            emotion = None
+            emotion_intensity = None
+            content = None
         
-        session_summary = {
-            "total_readings": len(today_logs),
-            "dominant_emotion": dominant_emotion,
-            "average_intensity": round(avg_intensity * 100),
-            "emotion_breakdown": emotion_counts
+        # Debug (reduced frequency)
+        print(f"📊 Dashboard: user={current_user.id}, recording={is_recording}, emotion={emotion}, content={content}")
+        
+        return {
+            "current_emotion": emotion,
+            "current_emotion_intensity": emotion_intensity,
+            "current_content": content,
+            "status": status,
+            "last_session": last_log.created_at.isoformat() if last_log else None,
+            "session_summary": None  # Moved to separate endpoint for performance
         }
-    
-    return {
-        "current_emotion": emotion,
-        "current_emotion_intensity": emotion_intensity,
-        "current_content": content,
-        "status": status,
-        "last_session": last_log.created_at.isoformat() if last_log else None,
-        "session_summary": session_summary
-    }
+    except Exception as e:
+        print(f"❌ Dashboard error: {e}")
+        return {
+            "current_emotion": None,
+            "current_emotion_intensity": None,
+            "current_content": None,
+            "status": "Idle",
+            "last_session": None,
+            "session_summary": None
+        }
 
 @app.get("/api/admin/stats")
 def admin_get_stats(

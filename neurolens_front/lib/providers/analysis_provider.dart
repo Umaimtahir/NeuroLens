@@ -20,6 +20,7 @@ class AnalysisProvider with ChangeNotifier {
 
   Timer? _analysisTimer;
   bool _isAnalyzing = false;
+  bool _isProcessingFrame = false;  // Prevent overlapping requests
   CameraController? _cameraController;  // Reference to shared camera
   
   // Multiple faces detection
@@ -83,13 +84,20 @@ class AnalysisProvider with ChangeNotifier {
     
     notifyListeners();
 
-    // ✅ Capture and send frames every 3 seconds
-    _analysisTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+    // ✅ Capture and send frames every 2 seconds (30 frames per minute) - balanced for performance
+    _analysisTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+      // Skip if previous request is still processing
+      if (_isProcessingFrame) {
+        print('⏳ Skipping frame - previous request still processing');
+        return;
+      }
+      
       if (_cameraController == null || !_cameraController!.value.isInitialized) {
         print('⚠️ Camera no longer available');
         return;
       }
 
+      _isProcessingFrame = true;  // Lock
       try {
         print('📸 Capturing frame for analysis...');
 
@@ -194,6 +202,8 @@ class AnalysisProvider with ChangeNotifier {
         notifyListeners();
       } catch (e) {
         print('❌ Error analyzing frame: $e');
+      } finally {
+        _isProcessingFrame = false;  // Unlock - allow next frame
       }
     });
   }
