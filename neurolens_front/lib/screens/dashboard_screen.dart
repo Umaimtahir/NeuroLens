@@ -20,6 +20,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _currentEmotion;
   double? _emotionIntensity;
   String? _currentContent;
+  String? _currentActivity;
+  String? _activityEmoji;
+  String? _currentProductivity;
+  String? _productivityEmoji;
+  String? _currentAppName;
   String _status = 'Idle';
   DateTime? _lastSession;
   Map<String, dynamic>? _sessionSummary;
@@ -66,6 +71,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _currentContent = response['current_content'];
           _status = response['status'] ?? 'Idle';
           _sessionSummary = response['session_summary'];
+
+          // Parse content details (activity, productivity, app info)
+          final details = response['content_details'];
+          if (details != null && details is Map) {
+            _currentActivity = details['activity'];
+            _activityEmoji = details['activity_emoji'];
+            _currentProductivity = details['productivity'];
+            _productivityEmoji = details['productivity_emoji'];
+            _currentAppName = details['app_name'];
+          } else {
+            _currentActivity = null;
+            _activityEmoji = null;
+            _currentProductivity = null;
+            _productivityEmoji = null;
+            _currentAppName = null;
+          }
 
           if (response['last_session'] != null) {
             _lastSession = DateTime.parse(response['last_session']);
@@ -125,11 +146,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Expanded(
                   child: _buildInfoCard(
                     context,
-                    _status == 'Recording' ? 'Current Content' : 'Last Content',
-                    _currentContent ?? 'No data yet',
+                    _status == 'Recording' ? 'Current Activity' : 'Last Activity',
+                    _currentActivity != null
+                        ? '${_activityEmoji ?? ''} ${_currentActivity}'
+                        : (_currentContent ?? 'No data yet'),
                     Icons.school,
-                    Colors.amber,
-                    subtitle: _currentContent == null ? 'Start recording to track' : null,
+                    _getProductivityColor(_currentProductivity),
+                    subtitle: _currentContent != null && _currentActivity != null
+                        ? '${_currentContent}${_currentAppName != null && _currentAppName!.isNotEmpty ? ' • $_currentAppName' : ''}'
+                        : (_currentContent == null ? 'Start recording to track' : null),
                   ),
                 ),
               ],
@@ -292,6 +317,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return Colors.purple;
       default:
         return Colors.grey;
+    }
+  }
+
+  Color _getProductivityColor(String? productivity) {
+    if (productivity == null) return Colors.amber;
+    switch (productivity.toUpperCase()) {
+      case 'PRODUCTIVE':
+        return Colors.green;
+      case 'UNPRODUCTIVE':
+        return Colors.red;
+      case 'NEUTRAL':
+      default:
+        return Colors.amber;
     }
   }
 

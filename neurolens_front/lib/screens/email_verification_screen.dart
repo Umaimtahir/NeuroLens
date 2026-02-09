@@ -71,7 +71,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const DashboardScreen()),
-                (route) => false,
+            (route) => false,
           );
         } else {
           final error = jsonDecode(response.body);

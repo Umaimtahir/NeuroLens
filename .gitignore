@@ -12,6 +12,7 @@ models/*.h5
 models/*.pt
 models/*.pth
 models/*.pkl
+models_cache/
 
 # Android / Gradle
 android-app/.gradle/

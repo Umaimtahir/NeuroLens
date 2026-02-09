@@ -68,6 +68,41 @@ class AnalysisSession(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class ContentSession(Base):
+    """Track content consumption sessions with duration and activity type"""
+    __tablename__ = "content_sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, nullable=False, index=True)
+    username = Column(String(255), nullable=False)
+    
+    # Content classification
+    content_type = Column(String(50), nullable=False, index=True)   # e.g. VIDEO/STREAMING, CODING/DEVELOPMENT
+    content_confidence = Column(Float, nullable=True)
+    
+    # Activity classification (what the user is DOING)
+    activity = Column(String(50), nullable=False, index=True)       # e.g. WATCHING, CODING, READING, WRITING
+    activity_emoji = Column(String(10), nullable=True)
+    activity_confidence = Column(String(20), nullable=True)
+    
+    # Productivity classification
+    productivity = Column(String(20), nullable=True)                 # PRODUCTIVE, NEUTRAL, UNPRODUCTIVE
+    productivity_emoji = Column(String(10), nullable=True)
+    
+    # Window/app details
+    app_name = Column(String(100), nullable=True)
+    window_title = Column(String(500), nullable=True)
+    
+    # Time tracking
+    started_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    ended_at = Column(DateTime(timezone=True), nullable=True)
+    duration_seconds = Column(Integer, nullable=True)               # computed when session ends
+    
+    is_active = Column(Boolean, default=True)                       # is this session still ongoing?
+    is_guest = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class AuditLog(Base):
     """Store all system audit events for admin review"""
     __tablename__ = "audit_logs"

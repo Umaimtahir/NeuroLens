@@ -7,7 +7,7 @@ import json
 import logging
 from datetime import datetime, timedelta, timezone
 from database import engine, get_db, Base
-from models import User, EmotionLog, AnalysisSession, AuditLog
+from models import User, EmotionLog, AnalysisSession, AuditLog, ContentSession
 from schemas import (
     UserSignup, UserLogin, UserResponse, 
     LoginResponse, SignupResponse, ReportData,
@@ -28,18 +28,162 @@ from fastapi import Header
 content_analyzer = None
 CONTENT_CLASSIFIER_AVAILABLE = False
 windows_api = None
+activity_classifier = None
+
+# In-memory session tracker: {user_id: {"content_type": ..., "activity": ..., "started_at": ..., "session_id": ...}}
+active_content_sessions = {}
 
 def get_fast_content_detector():
     """Get fast Windows API-based content detector (no ML models)"""
     global windows_api
     if windows_api is None:
         try:
-            from screen_classifer import WindowsAPI
+            from window_detector import WindowsAPI
             windows_api = WindowsAPI()
             print("✅ Fast content detector (Windows API) loaded!")
         except Exception as e:
             print(f"⚠️ Fast content detector not available: {e}")
     return windows_api
+
+def get_activity_classifier():
+    """Get the activity classifier (lightweight, no ML models)"""
+    global activity_classifier
+    if activity_classifier is None:
+        try:
+            from window_detector import ActivityClassifier
+            activity_classifier = ActivityClassifier()
+            print("✅ Activity classifier loaded!")
+        except Exception as e:
+            print(f"⚠️ Activity classifier not available: {e}")
+    return activity_classifier
+
+
+def _classify_activity(app_name: str, window_title: str, category: str) -> dict:
+    """Classify user activity (WATCHING, READING, CODING, etc.) from window info."""
+    classifier = get_activity_classifier()
+    if classifier:
+        try:
+            return classifier.classify(
+                app_name=app_name,
+                window_title=window_title,
+                category=category,
+            )
+        except Exception as e:
+            print(f"⚠️ Activity classification error: {e}")
+    return {
+        'activity': 'BROWSING',
+        'emoji': '🌐',
+        'confidence': 'Low',
+        'score': 0,
+        'reason': 'classifier unavailable'
+    }
+
+
+def _get_productivity(activity: str, category: str) -> dict:
+    """Simple rule-based productivity classification (no ML overhead)."""
+    activity_upper = (activity or '').upper()
+    category_upper = (category or '').upper()
+
+    productive_activities = ['CODING', 'LEARNING', 'WRITING', 'READING', 'DESIGNING']
+    unproductive_activities = ['GAMING', 'WATCHING', 'SHOPPING']
+
+    productive_categories = ['CODING/DEVELOPMENT', 'EDUCATION', 'DOCUMENT/PRODUCTIVITY', 'DATABASE', 'DEVOPS', 'API TESTING']
+    unproductive_categories = ['GAMING', 'VIDEO/STREAMING', 'SOCIAL MEDIA']
+
+    if activity_upper in productive_activities or category_upper in productive_categories:
+        return {'classification': 'PRODUCTIVE', 'emoji': '✅'}
+    elif activity_upper in unproductive_activities or category_upper in unproductive_categories:
+        return {'classification': 'UNPRODUCTIVE', 'emoji': '⚠️'}
+    return {'classification': 'NEUTRAL', 'emoji': '➖'}
+
+
+def _update_content_session(db: Session, user_id: int, username: str,
+                            content_type: str, content_confidence: float,
+                            activity: str, activity_emoji: str, activity_confidence: str,
+                            productivity: str, productivity_emoji: str,
+                            app_name: str, window_title: str, is_guest: bool):
+    """
+    Track content sessions with time duration.
+    If the user is still on the same content_type+activity, keep the session.
+    If content/activity changed, close the old session and open a new one.
+    """
+    now = datetime.now(timezone.utc)
+    session_key = user_id
+
+    prev = active_content_sessions.get(session_key)
+
+    # Check if same session continues (same content + activity)
+    same_session = (
+        prev is not None
+        and prev.get('content_type') == content_type
+        and prev.get('activity') == activity
+    )
+
+    if same_session:
+        # Session continues – update duration in DB periodically (every call)
+        try:
+            session_row = db.query(ContentSession).filter(
+                ContentSession.id == prev['session_id'],
+                ContentSession.is_active == True
+            ).first()
+            if session_row:
+                session_row.duration_seconds = int((now - prev['started_at']).total_seconds())
+                session_row.ended_at = now
+                db.flush()
+        except Exception as e:
+            print(f"⚠️ Session update error: {e}")
+        return prev.get('session_id')
+
+    # --- Content/activity changed OR first call ---
+
+    # Close previous session
+    if prev and prev.get('session_id'):
+        try:
+            old_session = db.query(ContentSession).filter(
+                ContentSession.id == prev['session_id'],
+                ContentSession.is_active == True
+            ).first()
+            if old_session:
+                old_session.is_active = False
+                old_session.ended_at = now
+                old_session.duration_seconds = int((now - prev['started_at']).total_seconds())
+                db.flush()
+                print(f"⏱️ Session ended: {prev['content_type']}/{prev['activity']} — {old_session.duration_seconds}s")
+        except Exception as e:
+            print(f"⚠️ Close old session error: {e}")
+
+    # Open new session
+    try:
+        new_session = ContentSession(
+            user_id=user_id,
+            username=username,
+            content_type=content_type or 'UNKNOWN',
+            content_confidence=content_confidence,
+            activity=activity or 'BROWSING',
+            activity_emoji=activity_emoji,
+            activity_confidence=activity_confidence,
+            productivity=productivity,
+            productivity_emoji=productivity_emoji,
+            app_name=(app_name or '')[:100],
+            window_title=(window_title or '')[:500],
+            started_at=now,
+            is_active=True,
+            is_guest=is_guest
+        )
+        db.add(new_session)
+        db.flush()  # get new_session.id
+
+        active_content_sessions[session_key] = {
+            'session_id': new_session.id,
+            'content_type': content_type,
+            'activity': activity,
+            'started_at': now,
+        }
+        print(f"▶️ New session: {content_type}/{activity} (id={new_session.id})")
+        return new_session.id
+    except Exception as e:
+        print(f"⚠️ New session error: {e}")
+        return None
 
 def get_content_analyzer():
     """Lazy load the full content analyzer (heavy ML models) - use sparingly"""
@@ -1050,19 +1194,37 @@ def stop_recording(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Mark recording as stopped for current user"""
+    """Mark recording as stopped for current user and close any active content session"""
     
     is_guest = getattr(current_user, 'is_guest', False)
     
     if is_guest or current_user.id == 0:
+        # Clear in-memory session for guest
+        active_content_sessions.pop(current_user.id, None)
         return {"status": "idle", "message": "Guest recording stopped"}
     
     try:
+        now = datetime.now(timezone.utc)
         user = db.query(User).filter(User.id == current_user.id).first()
         if user:
             user.is_recording = False
-            db.commit()
-            print(f"⏹️ Recording stopped for user: {current_user.id}")
+        
+        # Close active content session in DB
+        active_sessions = db.query(ContentSession).filter(
+            ContentSession.user_id == current_user.id,
+            ContentSession.is_active == True
+        ).all()
+        for sess in active_sessions:
+            sess.is_active = False
+            sess.ended_at = now
+            if sess.started_at:
+                sess.duration_seconds = int((now - sess.started_at).total_seconds())
+        
+        # Clear in-memory tracker
+        active_content_sessions.pop(current_user.id, None)
+        
+        db.commit()
+        print(f"⏹️ Recording stopped for user: {current_user.id} ({len(active_sessions)} session(s) closed)")
         
         return {"status": "idle", "message": "Recording stopped"}
     except Exception as e:
@@ -1077,7 +1239,7 @@ async def analyze_frame(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Analyze emotion from uploaded frame"""
+    """Analyze emotion from uploaded frame with content + activity classification + time tracking"""
     
     is_guest = getattr(current_user, 'is_guest', False)
     username = getattr(current_user, 'username', 'guest')
@@ -1085,38 +1247,70 @@ async def analyze_frame(
     if not is_guest:
         username = EncryptionService.decrypt_data(current_user.username_encrypted)
     
-    # Content Classification using Fast Windows API (no ML, instant)
-    content_result = None
+    # ===== CONTENT CLASSIFICATION (Windows API - fast, no ML) =====
     content_type = None
     content_confidence = None
-    content_details = {}
+    app_name = ""
+    window_title = ""
     
-    # Use fast Windows API detector for real-time frame analysis
     fast_detector = get_fast_content_detector()
     if fast_detector:
         try:
             content_result = fast_detector.categorize_from_window()
             content_type = content_result.get('category', 'OTHER')
-            # Convert confidence string to float
+            app_name = content_result.get('app', '')
+            window_title = content_result.get('title', '')
             confidence_map = {'Very High': 0.95, 'High': 0.80, 'Medium': 0.60, 'Low': 0.40}
             content_confidence = confidence_map.get(content_result.get('confidence', 'Low'), 0.40)
-            content_details = {
-                'app_name': content_result.get('app', ''),
-                'window_title': content_result.get('title', '')[:100],
-                'activity': 'DETECTED',  # Fast mode doesn't classify activity
-                'activity_emoji': content_result.get('emoji', '🏷️'),
-                'productivity': 'NEUTRAL',  # Fast mode doesn't classify productivity
-                'productivity_emoji': '➖',
-                'sentiment': 'NEUTRAL',
-                'sentiment_emoji': '😐',
-                'visual_description': '',
-            }
-            print(f"📊 Content (fast): {content_type} - {content_result.get('app', 'unknown')}")
         except Exception as e:
             print(f"⚠️ Content detection failed: {e}")
-            content_type = None
-            content_confidence = None
     
+    # ===== ACTIVITY CLASSIFICATION (WATCHING, READING, CODING, etc.) =====
+    activity_result = _classify_activity(app_name, window_title, content_type or "")
+    activity = activity_result.get('activity', 'BROWSING')
+    activity_emoji = activity_result.get('emoji', '🌐')
+    activity_confidence = activity_result.get('confidence', 'Low')
+    
+    # ===== PRODUCTIVITY CLASSIFICATION =====
+    productivity_result = _get_productivity(activity, content_type)
+    productivity = productivity_result['classification']
+    productivity_emoji = productivity_result['emoji']
+    
+    # Build content details dict for API response
+    content_details = {
+        'app_name': app_name,
+        'window_title': window_title[:200],
+        'activity': activity,
+        'activity_emoji': activity_emoji,
+        'activity_confidence': activity_confidence,
+        'productivity': productivity,
+        'productivity_emoji': productivity_emoji,
+    }
+    
+    print(f"📊 Content: {content_type} | Activity: {activity_emoji} {activity} | Productivity: {productivity_emoji} {productivity}")
+    
+    # ===== CONTENT SESSION TIME TRACKING =====
+    session_id = None
+    try:
+        session_id = _update_content_session(
+            db=db,
+            user_id=current_user.id,
+            username=username,
+            content_type=content_type or "UNKNOWN",
+            content_confidence=content_confidence,
+            activity=activity,
+            activity_emoji=activity_emoji,
+            activity_confidence=activity_confidence,
+            productivity=productivity,
+            productivity_emoji=productivity_emoji,
+            app_name=app_name,
+            window_title=window_title,
+            is_guest=is_guest
+        )
+    except Exception as e:
+        print(f"⚠️ Session tracking error: {e}")
+    
+    # ===== EMOTION DETECTION =====
     if file:
         try:
             contents = await file.read()
@@ -1134,14 +1328,12 @@ async def analyze_frame(
                     "timestamp": datetime.now().isoformat(),
                     "face_detected": result.get('face_detected', False),
                     "probabilities": result.get('probabilities', {}),
-                    # Pass through error fields for frontend
                     "error": result.get('error'),
                     "error_message": result.get('error_message'),
                     "stop_detection": result.get('stop_detection', False),
                     "face_count": result.get('face_count', 1)
                 }
             else:
-                # Fallback if model not available
                 emotion_data = {
                     "emotion": "neutral",
                     "intensity": 0.5,
@@ -1151,50 +1343,57 @@ async def analyze_frame(
                     "timestamp": datetime.now().isoformat()
                 }
             
-            # ✅ Only save VALID emotions to database (skip error, no_face, unknown)
+            # ✅ Only save VALID emotions to database
             invalid_emotions = ['error', 'no_face', 'unknown']
             should_save = emotion_data["emotion"] not in invalid_emotions
             
             if should_save:
-                # Save to database with content classification
                 try:
                     emotion_log = EmotionLog(
                         user_id=current_user.id,
                         username=username,
                         emotion=emotion_data["emotion"],
                         intensity=emotion_data["intensity"],
-                        content_type=content_type,  # Screen classifier result
-                        content_confidence=content_confidence,  # Screen classifier confidence
+                        content_type=content_type,
+                        content_confidence=content_confidence,
                         probabilities=json.dumps(emotion_data.get("probabilities", {})),
                         is_guest=is_guest
                     )
                     db.add(emotion_log)
                     
-                    # ✅ Update user's current state only for valid emotions
                     if not is_guest:
                         user = db.query(User).filter(User.id == current_user.id).first()
                         if user:
                             user.current_emotion = emotion_data["emotion"]
                             user.current_emotion_intensity = emotion_data["intensity"]
-                            user.current_content = content_type  # Screen classifier result
+                            user.current_content = content_type
                             user.last_activity = datetime.now(timezone.utc)
-                            user.is_recording = True  # Mark as actively recording
-                            print(f"📝 User update: emotion={user.current_emotion}, content={content_type}, is_recording={user.is_recording}")
+                            user.is_recording = True
                     
                     db.commit()
-                    print(f"✅ Emotion logged: {username} - {emotion_data['emotion']} ({emotion_data['intensity']:.2f})")
+                    print(f"✅ Logged: {username} - {emotion_data['emotion']} | {activity} on {content_type}")
                 except Exception as e:
                     print(f"❌ Failed to save emotion log: {e}")
                     db.rollback()
             else:
-                print(f"⏭️ Skipping database save for invalid emotion: {emotion_data['emotion']}")
+                # Still commit content session even if emotion is invalid
+                try:
+                    db.commit()
+                except Exception:
+                    pass
+                print(f"⏭️ Skipping emotion save for: {emotion_data['emotion']}")
             
             return emotion_data
             
         except Exception as e:
             logger.error(f"Frame analysis error: {e}")
     
-    # Fallback response if no file - still return content classification
+    # ✅ Commit the content session even if no camera frame
+    try:
+        db.commit()
+    except Exception:
+        pass
+    
     return {
         "emotion": "neutral",
         "intensity": 0.5,
@@ -1340,6 +1539,183 @@ def get_emotion_history(
         }
         for e in emotions
     ]
+
+
+# ==================== CONTENT SESSION ENDPOINTS ====================
+
+@app.get("/api/content/sessions")
+def get_content_sessions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    limit: int = 50,
+    offset: int = 0
+):
+    """
+    Get content consumption session history for the current user.
+    Each session shows what the user was doing, for how long, and the content type.
+    """
+    sessions = db.query(ContentSession).filter(
+        ContentSession.user_id == current_user.id
+    ).order_by(ContentSession.started_at.desc()).offset(offset).limit(limit).all()
+    
+    return [
+        {
+            "id": s.id,
+            "content_type": s.content_type,
+            "activity": s.activity,
+            "activity_emoji": s.activity_emoji,
+            "activity_confidence": s.activity_confidence,
+            "productivity": s.productivity,
+            "productivity_emoji": s.productivity_emoji,
+            "app_name": s.app_name,
+            "window_title": s.window_title,
+            "started_at": s.started_at.isoformat() if s.started_at else None,
+            "ended_at": s.ended_at.isoformat() if s.ended_at else None,
+            "duration_seconds": s.duration_seconds,
+            "duration_formatted": _format_duration(s.duration_seconds),
+            "is_active": s.is_active,
+        }
+        for s in sessions
+    ]
+
+
+@app.get("/api/content/sessions/summary")
+def get_content_sessions_summary(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    hours: int = 24
+):
+    """
+    Get a summary of content consumption for the last N hours.
+    Groups by content_type and activity, showing total time spent on each.
+    """
+    from sqlalchemy import func as sqla_func
+    
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    
+    # Summarize by content type
+    content_summary = db.query(
+        ContentSession.content_type,
+        sqla_func.sum(ContentSession.duration_seconds).label('total_seconds'),
+        sqla_func.count(ContentSession.id).label('session_count')
+    ).filter(
+        ContentSession.user_id == current_user.id,
+        ContentSession.started_at >= cutoff,
+        ContentSession.duration_seconds.isnot(None)
+    ).group_by(ContentSession.content_type).all()
+    
+    # Summarize by activity
+    activity_summary = db.query(
+        ContentSession.activity,
+        ContentSession.activity_emoji,
+        sqla_func.sum(ContentSession.duration_seconds).label('total_seconds'),
+        sqla_func.count(ContentSession.id).label('session_count')
+    ).filter(
+        ContentSession.user_id == current_user.id,
+        ContentSession.started_at >= cutoff,
+        ContentSession.duration_seconds.isnot(None)
+    ).group_by(ContentSession.activity, ContentSession.activity_emoji).all()
+    
+    # Summarize by productivity
+    productivity_summary = db.query(
+        ContentSession.productivity,
+        ContentSession.productivity_emoji,
+        sqla_func.sum(ContentSession.duration_seconds).label('total_seconds'),
+        sqla_func.count(ContentSession.id).label('session_count')
+    ).filter(
+        ContentSession.user_id == current_user.id,
+        ContentSession.started_at >= cutoff,
+        ContentSession.duration_seconds.isnot(None)
+    ).group_by(ContentSession.productivity, ContentSession.productivity_emoji).all()
+    
+    total_seconds = sum(row.total_seconds or 0 for row in content_summary)
+    
+    return {
+        "period_hours": hours,
+        "total_time_seconds": total_seconds,
+        "total_time_formatted": _format_duration(total_seconds),
+        "by_content_type": [
+            {
+                "content_type": row.content_type,
+                "total_seconds": row.total_seconds,
+                "total_formatted": _format_duration(row.total_seconds),
+                "session_count": row.session_count,
+                "percentage": round((row.total_seconds / total_seconds * 100), 1) if total_seconds > 0 else 0
+            }
+            for row in content_summary
+        ],
+        "by_activity": [
+            {
+                "activity": row.activity,
+                "activity_emoji": row.activity_emoji,
+                "total_seconds": row.total_seconds,
+                "total_formatted": _format_duration(row.total_seconds),
+                "session_count": row.session_count,
+                "percentage": round((row.total_seconds / total_seconds * 100), 1) if total_seconds > 0 else 0
+            }
+            for row in activity_summary
+        ],
+        "by_productivity": [
+            {
+                "productivity": row.productivity,
+                "productivity_emoji": row.productivity_emoji,
+                "total_seconds": row.total_seconds,
+                "total_formatted": _format_duration(row.total_seconds),
+                "session_count": row.session_count,
+                "percentage": round((row.total_seconds / total_seconds * 100), 1) if total_seconds > 0 else 0
+            }
+            for row in productivity_summary
+        ],
+    }
+
+
+@app.get("/api/content/sessions/active")
+def get_active_content_session(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get the user's currently active content session (what they're doing right now)."""
+    session = db.query(ContentSession).filter(
+        ContentSession.user_id == current_user.id,
+        ContentSession.is_active == True
+    ).order_by(ContentSession.started_at.desc()).first()
+    
+    if not session:
+        return {"active": False, "session": None}
+    
+    now = datetime.now(timezone.utc)
+    elapsed = int((now - session.started_at).total_seconds()) if session.started_at else 0
+    
+    return {
+        "active": True,
+        "session": {
+            "id": session.id,
+            "content_type": session.content_type,
+            "activity": session.activity,
+            "activity_emoji": session.activity_emoji,
+            "productivity": session.productivity,
+            "productivity_emoji": session.productivity_emoji,
+            "app_name": session.app_name,
+            "window_title": session.window_title,
+            "started_at": session.started_at.isoformat(),
+            "elapsed_seconds": elapsed,
+            "elapsed_formatted": _format_duration(elapsed),
+        }
+    }
+
+
+def _format_duration(seconds) -> str:
+    """Format seconds into human-readable duration string."""
+    if not seconds or seconds <= 0:
+        return "0s"
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    if hours > 0:
+        return f"{hours}h {minutes}m {secs}s"
+    elif minutes > 0:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
 
 
 @app.get("/api/terms")
@@ -1570,6 +1946,12 @@ def get_dashboard_status(
             EmotionLog.user_id == current_user.id
         ).order_by(EmotionLog.created_at.desc()).limit(1).first()
         
+        # Get the active content session for richer dashboard data
+        active_session = db.query(ContentSession).filter(
+            ContentSession.user_id == current_user.id,
+            ContentSession.is_active == True
+        ).order_by(ContentSession.started_at.desc()).limit(1).first()
+        
         # Determine status
         is_recording = getattr(user, 'is_recording', False) if user else False
         status = "Recording" if is_recording else "Idle"
@@ -1584,13 +1966,29 @@ def get_dashboard_status(
             emotion_intensity = None
             content = None
         
+        # Build content details from active session
+        content_details = None
+        if active_session:
+            # Prefer active session content over EmotionLog (more detailed)
+            if not content or content == 'UNKNOWN':
+                content = active_session.content_type
+            content_details = {
+                'activity': active_session.activity,
+                'activity_emoji': active_session.activity_emoji,
+                'productivity': active_session.productivity,
+                'productivity_emoji': active_session.productivity_emoji,
+                'app_name': active_session.app_name,
+                'duration_seconds': active_session.duration_seconds or 0,
+            }
+        
         # Debug (reduced frequency)
-        print(f"📊 Dashboard: user={current_user.id}, recording={is_recording}, emotion={emotion}, content={content}")
+        print(f"📊 Dashboard: user={current_user.id}, recording={is_recording}, emotion={emotion}, content={content}, activity={content_details.get('activity') if content_details else None}")
         
         return {
             "current_emotion": emotion,
             "current_emotion_intensity": emotion_intensity,
             "current_content": content,
+            "content_details": content_details,
             "status": status,
             "last_session": last_log.created_at.isoformat() if last_log else None,
             "session_summary": None  # Moved to separate endpoint for performance
