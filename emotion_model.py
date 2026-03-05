@@ -12,28 +12,67 @@ except ImportError:
     cv2 = None
     np = None
 
+try:
+    import torch
+    import torch.nn as nn
+    import timm
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
+    nn = None
+    timm = None
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
+if TORCH_AVAILABLE:
+    class _EmotionModel(nn.Module):
+        """EfficientNet-B4 backbone + custom classifier (matches training checkpoint)."""
+        def __init__(self, num_classes=7):
+            super().__init__()
+            self.backbone = timm.create_model('efficientnet_b4', pretrained=False, num_classes=0)
+            self.classifier = nn.Sequential(
+                nn.Dropout(0.5),
+                nn.Linear(1792, 512),
+                nn.ReLU(),
+                nn.Dropout(0.3),
+                nn.Linear(512, num_classes)
+            )
+
+        def forward(self, x):
+            features = self.backbone(x)
+            return self.classifier(features)
+else:
+    _EmotionModel = None
+
+
 class EmotionDetector:
     """
-    Emotion detection from facial expressions.
-    Supports TensorFlow/Keras or optional PyTorch model.
+    Emotion detection from facial expressions using a PyTorch EfficientNet-B4 model.
     Falls back to mock predictions if dependencies are missing.
     """
+
+    # Max dimension for face detection (smaller = faster)
+    FACE_DETECT_MAX_DIM = 320
 
     def __init__(self, model_path: Optional[str] = None):
         # Default path relative to this file
         if model_path is None:
-            model_path = r"E:\Semester 7\fyp project\models\emotion_detection_model.h5"
+            model_path = r"E:\Semester 7\fyp project\models\74.pth"
         
         self.model_path: str = os.path.abspath(model_path)
         self.model: Optional[Any] = None
-        self.emotions = ['angry', 'disgust', 'fear', 'happy', 'sad', 'surprise', 'neutral']
+        self.device = None
+        self.emotions = ['angry', 'disgust', 'fear', 'happy', 'neutral', 'sad', 'surprise']
         
         # Face detection - use DNN if available, fallback to Haar Cascade
         self.face_detector = None
         self.use_dnn = False
+        
+        # Pre-load cascade classifiers ONCE (not per frame)
+        self._cascade_default = None
+        self._cascade_alt = None
         self._init_face_detector()
 
         self._load_model()
@@ -44,8 +83,6 @@ class EmotionDetector:
             return
             
         try:
-            # Try to use OpenCV DNN face detector (more accurate for multiple faces)
-            # Check if we have the model files
             dnn_proto = cv2.data.haarcascades.replace('haarcascades', '') + "deploy.prototxt"
             dnn_model = cv2.data.haarcascades.replace('haarcascades', '') + "res10_300x300_ssd_iter_140000.caffemodel"
             
@@ -54,7 +91,6 @@ class EmotionDetector:
                 self.use_dnn = True
                 logger.info("✅ Using DNN face detector (more accurate)")
             else:
-                # Fallback to Haar Cascade
                 self.face_detector = cv2.CascadeClassifier(
                     cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
                 )
@@ -67,27 +103,54 @@ class EmotionDetector:
             )
             self.use_dnn = False
 
-    def _load_model(self) -> None:
-        """Load a pre-trained model (TensorFlow/Keras or PyTorch)."""
+        # Pre-load cascade classifiers once (reused every frame)
         try:
-            # Try TensorFlow/Keras first
-            try:
-                from keras.models import load_model
-                self.model = load_model(self.model_path)
-                logger.info("✅ Loaded Keras/TensorFlow model")
-            except ImportError:
-                # Fall back to PyTorch
-                try:
-                    import torch  # type: ignore[import-not-found]
-                    self.model = torch.load(self.model_path)
-                    self.model.eval()
-                    logger.info("✅ Loaded PyTorch model")
-                except ImportError:
-                    logger.warning("Neither TensorFlow nor PyTorch available")
+            self._cascade_default = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            )
+            self._cascade_alt = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_frontalface_alt2.xml'
+            )
+            logger.info("✅ Cascade classifiers pre-loaded")
+        except Exception as e:
+            logger.warning(f"Failed to pre-load cascades: {e}")
+
+    def _load_model(self) -> None:
+        """Load the PyTorch EfficientNet-B4 emotion model."""
+        if not TORCH_AVAILABLE:
+            logger.warning("PyTorch/timm not available. Using mock predictions.")
+            return
+
+        try:
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            model = _EmotionModel(num_classes=7)
+            checkpoint = torch.load(self.model_path, map_location=self.device)
+
+            if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+                model.load_state_dict(checkpoint['model_state_dict'])
+            elif isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+                model.load_state_dict(checkpoint['state_dict'])
+            else:
+                model.load_state_dict(checkpoint)
+
+            model.to(self.device)
+            model.eval()
+            self.model = model
+            logger.info(f"✅ Loaded PyTorch emotion model on {self.device}")
         except FileNotFoundError:
             logger.warning(f"Model file not found: {self.model_path}. Using mock predictions.")
         except Exception as e:
             logger.error(f"Failed to load model: {e}. Using mock predictions.")
+
+    def _downscale_for_detection(self, gray: Any) -> Tuple[Any, float]:
+        """Downscale image for faster face detection, return (resized, scale_factor)."""
+        h, w = gray.shape[:2]
+        max_dim = self.FACE_DETECT_MAX_DIM
+        if max(h, w) <= max_dim:
+            return gray, 1.0
+        scale = max_dim / max(h, w)
+        small = cv2.resize(gray, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+        return small, scale
 
     def detect_face(self, image: Any) -> Tuple[str, Optional[Any], int]:
         """
@@ -107,63 +170,51 @@ class EmotionDetector:
                 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             else:
                 gray = image
-            
-            # Use multiple cascades for better detection
-            face_cascade_default = cv2.CascadeClassifier(
-                cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+
+            # Downscale for faster detection
+            small_gray, scale = self._downscale_for_detection(gray)
+            min_face = max(20, int(30 * scale))  # scale minSize too
+
+            # Use pre-loaded primary cascade (fast path)
+            faces = self._cascade_default.detectMultiScale(
+                small_gray, scaleFactor=1.1, minNeighbors=3, minSize=(min_face, min_face)
             )
-            face_cascade_alt = cv2.CascadeClassifier(
-                cv2.data.haarcascades + 'haarcascade_frontalface_alt.xml'
-            )
-            face_cascade_alt2 = cv2.CascadeClassifier(
-                cv2.data.haarcascades + 'haarcascade_frontalface_alt2.xml'
-            )
-            
-            # ✅ Try multiple detectors and use the one that finds the most faces
-            all_faces = []
-            
-            # Detector 1: Default with lenient params
-            faces1 = face_cascade_default.detectMultiScale(
-                gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30)
-            )
-            if len(faces1) > 0:
-                all_faces.append(('default', faces1))
-            
-            # Detector 2: Alt cascade (better for profile/angled faces)
-            faces2 = face_cascade_alt.detectMultiScale(
-                gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30)
-            )
-            if len(faces2) > 0:
-                all_faces.append(('alt', faces2))
-            
-            # Detector 3: Alt2 cascade
-            faces3 = face_cascade_alt2.detectMultiScale(
-                gray, scaleFactor=1.1, minNeighbors=3, minSize=(30, 30)
-            )
-            if len(faces3) > 0:
-                all_faces.append(('alt2', faces3))
-            
-            # Use the detector that found the MOST faces (catches multiple people)
-            if all_faces:
-                best_detector, faces = max(all_faces, key=lambda x: len(x[1]))
-                face_count = len(faces)
-                logger.info(f"🔍 Best detector '{best_detector}': {face_count} face(s) found")
-            else:
-                # Try even more lenient as last resort
-                faces = face_cascade_default.detectMultiScale(
-                    gray, scaleFactor=1.05, minNeighbors=2, minSize=(20, 20)
+            face_count = len(faces)
+
+            # Only try secondary cascade if primary found nothing
+            if face_count == 0 and self._cascade_alt is not None:
+                faces = self._cascade_alt.detectMultiScale(
+                    small_gray, scaleFactor=1.1, minNeighbors=3, minSize=(min_face, min_face)
                 )
                 face_count = len(faces)
-                logger.info(f"🔍 Lenient detection: {face_count} face(s) found")
-            
+
+            # Last resort: lenient params on primary
+            if face_count == 0:
+                min_face_lenient = max(15, int(20 * scale))
+                faces = self._cascade_default.detectMultiScale(
+                    small_gray, scaleFactor=1.05, minNeighbors=2, minSize=(min_face_lenient, min_face_lenient)
+                )
+                face_count = len(faces)
+
             # Check for multiple faces FIRST - this is the priority
             if face_count > 1:
                 logger.warning(f"⚠️ MULTIPLE FACES DETECTED: {face_count} people in frame!")
                 return 'multiple_faces', None, face_count
             
-            # Single face found
+            # Single face found - map coordinates back to original image
             if face_count == 1:
                 x, y, w, h = faces[0]
+                # Scale back to original resolution for ROI extraction
+                if scale != 1.0:
+                    x = int(x / scale)
+                    y = int(y / scale)
+                    w = int(w / scale)
+                    h = int(h / scale)
+                # Clip to image bounds
+                x = max(0, x)
+                y = max(0, y)
+                w = min(w, gray.shape[1] - x)
+                h = min(h, gray.shape[0] - y)
                 face_roi = gray[y:y+h, x:x+w]
                 logger.debug(f"Single face detected: {w}x{h} at ({x},{y})")
                 return 'single_face', face_roi, 1
@@ -176,17 +227,30 @@ class EmotionDetector:
             return 'error', None, 0
 
     def predict_emotion(self, face_image: Any) -> Dict[str, Any]:
-        """Predict emotion from a grayscale face image."""
+        """Predict emotion from a grayscale face image using PyTorch model."""
         if self.model is None:
             return self._mock_prediction()
 
         try:
-            # Preprocess for Keras/TensorFlow
-            face_resized = cv2.resize(face_image, (48, 48))
-            face_normalized = face_resized / 255.0
-            face_reshaped = face_normalized.reshape(1, 48, 48, 1)
+            # Convert grayscale to RGB
+            if len(face_image.shape) == 2:
+                face_rgb = cv2.cvtColor(face_image, cv2.COLOR_GRAY2RGB)
+            else:
+                face_rgb = face_image
 
-            predictions = self.model.predict(face_reshaped, verbose=0)[0]
+            # Resize to EfficientNet-B4 input size
+            face_resized = cv2.resize(face_rgb, (380, 380))
+            face_normalized = face_resized.astype(np.float32) / 255.0
+            # ImageNet normalization
+            mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+            std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+            face_normalized = (face_normalized - mean) / std
+            # HWC -> CHW, add batch dim
+            face_tensor = torch.from_numpy(face_normalized.transpose(2, 0, 1)).unsqueeze(0).to(self.device)
+
+            with torch.no_grad():
+                output = self.model(face_tensor)
+                predictions = torch.softmax(output, dim=1)[0].cpu().numpy()
 
             emotion_idx = int(np.argmax(predictions))
             emotion = self.emotions[emotion_idx]
@@ -240,7 +304,7 @@ class EmotionDetector:
                     'intensity': 0.0
                 }
             
-            logger.info(f"📷 Processing frame: {image.shape}")
+            logger.debug(f"📷 Processing frame: {image.shape}")
 
             status, face_roi, face_count = self.detect_face(image)
             
