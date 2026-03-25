@@ -1,0 +1,24 @@
+# Python Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+
+# ML/System
+*.log
+.pytest_cache/
+.ipynb_checkpoints/
+models/  # If you store model weights locally
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -46,28 +46,41 @@ def get_fast_content_detector():
     return windows_api
 
 def get_activity_classifier():
-    """Get the activity classifier (lightweight, no ML models)"""
+    """Get the activity classifier (advanced ML module)"""
     global activity_classifier
     if activity_classifier is None:
         try:
-            from window_detector import ActivityClassifier
+            import sys
+            import os
+            # Insert Activity_Module directory to sys.path to allow its internal imports to work
+            module_path = os.path.join(os.path.dirname(__file__), "Activity_Module")
+            if module_path not in sys.path:
+                sys.path.insert(1, module_path)
+            from activity_classifier.classifier import ActivityClassifier
             activity_classifier = ActivityClassifier()
-            print("✅ Activity classifier loaded!")
+            print("✅ Advanced ML Activity classifier loaded!")
         except Exception as e:
             print(f"⚠️ Activity classifier not available: {e}")
     return activity_classifier
 
 
 def _classify_activity(app_name: str, window_title: str, category: str) -> dict:
-    """Classify user activity (WATCHING, READING, CODING, etc.) from window info."""
+    """Classify user activity using the advanced ML pipeline."""
     classifier = get_activity_classifier()
     if classifier:
         try:
-            return classifier.classify(
-                app_name=app_name,
-                window_title=window_title,
-                category=category,
-            )
+            # The new ActivityClassifier uses run_pipeline
+            # We pass just the window title since we don't have the frame here
+            result = classifier.run_pipeline(window_title_input=window_title)
+            
+            # Map the new ActivityResult to the expected dictionary format
+            return {
+                'activity': result.label,
+                'emoji': '✨',
+                'confidence': str(result.confidence),
+                'score': result.confidence,
+                'reason': result.source
+            }
         except Exception as e:
             print(f"⚠️ Activity classification error: {e}")
     return {
