@@ -24,6 +24,14 @@ from emotion_model import emotion_detector
 from terms_and_conditions import TERMS_AND_CONDITIONS, PRIVACY_POLICY
 from fastapi import Header
 
+# Helper function for safe decryption (doesn't spam warnings on failure)
+def safe_decrypt(encrypted_data: str, fallback: str = None) -> str:
+    """Safely decrypt data, returning fallback value on failure without logging warnings"""
+    try:
+        return EncryptionService.decrypt_data(encrypted_data)
+    except (ValueError, AttributeError):
+        return fallback if fallback is not None else encrypted_data
+
 # Content Classification - Use lightweight Windows API detection (fast, no ML)
 content_analyzer = None
 CONTENT_CLASSIFIER_AVAILABLE = False
@@ -1258,7 +1266,10 @@ async def analyze_frame(
     username = getattr(current_user, 'username', 'guest')
     
     if not is_guest:
-        username = EncryptionService.decrypt_data(current_user.username_encrypted)
+        try:
+            username = EncryptionService.decrypt_data(current_user.username_encrypted)
+        except ValueError:
+            username = f"user_{current_user.id}"
     
     # ===== CONTENT CLASSIFICATION (Windows API - fast, no ML) =====
     content_type = None
@@ -1935,21 +1946,9 @@ def get_dashboard_status(
 ):
     """Get current dashboard status - OPTIMIZED for high-frequency polling"""
     
-    is_guest = getattr(current_user, 'is_guest', False)
-    
-    if is_guest or current_user.id == 0:
-        return {
-            "current_emotion": None,
-            "current_emotion_intensity": None,
-            "current_content": None,
-            "status": "Idle",
-            "last_session": None,
-            "session_summary": None
-        }
-    
     try:
+    
         # Use a single efficient query to get both user and last log
-        # Don't use db.expire_all() - it causes extra queries
         from sqlalchemy.orm import joinedload
         
         user = db.query(User).filter(User.id == current_user.id).first()

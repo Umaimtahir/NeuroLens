@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     EMAIL_PASSWORD: str = ""
     EMAIL_FROM: str = "NeuroLens <noreply@neurolens.app>"
     
+    # Activity Module
+    BEHAVIORAL_POLL_INTERVAL: int = 5
+    
     class Config:
         env_file = ".env"
         extra = "ignore"

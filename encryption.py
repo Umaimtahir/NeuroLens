@@ -74,7 +74,7 @@ class EncryptionService:
             decrypted_bytes = fernet.decrypt(encrypted_bytes)
             return decrypted_bytes.decode()
         except Exception as e:
-            logger.error(f"Decryption error: {e}")
+            logger.debug(f"Decryption error: {e}")
             raise ValueError("Failed to decrypt data")
     
     @staticmethod
