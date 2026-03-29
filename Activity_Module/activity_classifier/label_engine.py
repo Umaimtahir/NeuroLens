@@ -231,30 +231,24 @@ def detect_app_subactivity(
     # ── OBS Studio ───────────────────────────────────────────────────────────
     if proc in ("obs64.exe", "obs32.exe", "obs.exe"):
         if "streaming" in title_lower or "live" in title_lower:
-            return "Creative - OBS Studio (Live Streaming)"
-        return "Creative - OBS Studio (Screen Recording)"
+            return "OBS Studio - Streaming"
+        return "OBS Studio - Recording"
 
     # ── Blender ──────────────────────────────────────────────────────────────
     if proc in ("blender.exe", "blender"):
         if "render" in title_lower:
-            return "Creative - Blender (3D Rendering)"
-        return "Creative - Blender (3D Modeling)"
+            return "Blender - Rendering"
+        return "Blender - Modeling"
 
     # ── DaVinci Resolve ───────────────────────────────────────────────────────
     if proc == "davinciresolve.exe":
-        if "deliver" in title_lower or "render" in title_lower:
-            return "Creative - DaVinci Resolve (Rendering)"
-        if "color" in title_lower:
-            return "Creative - DaVinci Resolve (Color Grading)"
-        return "Creative - DaVinci Resolve (Video Editing)"
+        if "export" in title_lower or "deliver" in title_lower:
+            return "DaVinci Resolve - Exporting"
+        return "DaVinci Resolve - Editing"
 
     # ── GitHub Desktop ───────────────────────────────────────────────────────
     if proc == "githubdesktop.exe":
-        if "pull request" in title_lower or "pr" in title_lower:
-            return "Work - GitHub Desktop"
-        if "history" in title_lower or "diff" in title_lower:
-            return "Work - GitHub Desktop"
-        return "Work - GitHub Desktop"
+        return "GitHub Desktop - Version Control"
 
     # ── File Explorer ────────────────────────────────────────────────────────
     if proc == "explorer.exe":
@@ -262,70 +256,39 @@ def detect_app_subactivity(
 
     # ── Task Manager ─────────────────────────────────────────────────────────
     if proc == "taskmgr.exe":
-        return "System - Task Manager (Performance Monitoring)"
+        return "Task Manager - Monitoring"
 
     # ── Microsoft Store ───────────────────────────────────────────────────────
     if proc in ("winstore.app.exe", "ms-windows-store.exe", "microsoftstore.exe",
                 "windowsstore.exe"):
-        if "update" in title_lower or "updates" in title_lower:
-            return "System - Microsoft Store"
-        if "library" in title_lower or "installed" in title_lower:
-            return "Shopping - Microsoft Store"
         if "download" in title_lower or "installing" in title_lower:
-            return "Shopping - Microsoft Store"
-        return "Shopping - Microsoft Store"
+            return "Microsoft Store - Installing"
+        return "Microsoft Store - Browsing"
 
     # ── Windows Settings ──────────────────────────────────────────────────────
     if proc in ("systemsettings.exe", "windowssettings.exe", "ms-settings.exe",
                 "windows.immersivecontrolpanel.exe"):
-        for kw, ctx in [
-            (["display", "resolution", "brightness"], "Display"),
-            (["network", "wifi", "bluetooth", "internet"], "Network"),
-            (["privacy", "permissions", "camera access"], "Privacy"),
-            (["update", "windows update"], "Updates"),
-            (["account", "sign in"], "Accounts"),
-            (["sound", "audio", "volume"], "Sound"),
-            (["apps", "default", "uninstall"], "Apps & Features"),
-        ]:
-            if any(k in title_lower for k in kw):
-                return f"System - Windows Settings"
-        return "System - Windows Settings"
+        return "Settings - Configuring"
 
     # ── Calculator ────────────────────────────────────────────────────────────
     if proc in ("calculatorapp.exe", "calculator.exe", "windowscalculator.exe"):
-        for kw, ctx in [
-            (["scientific"], "Scientific"), (["programmer"], "Programmer"),
-            (["graphing"], "Graphing"),
-            (["currency", "unit", "temperature", "converter"], "Converter"),
-        ]:
-            if any(k in title_lower for k in kw):
-                return f"Utility - Calculator"
-        return "Utility - Calculator"
+        return "Calculator - Using"
 
     # ── Notepad / WordPad ─────────────────────────────────────────────────────
     if proc in ("notepad.exe", "notepad2.exe", "wordpad.exe"):
-        app = "WordPad" if "wordpad" in proc else "Notepad"
-        if title and title_lower not in ("untitled - notepad", "notepad", ""):
-            fname = title.split(" - ")[0].strip()
-            return f"Work - Notepad"
-        return f"Work - Notepad"
+        return "Notepad - Editing"
 
     # ── Paint / Paint 3D ─────────────────────────────────────────────────────
     if proc in ("mspaint.exe", "paint.exe"):
-        app = "Paint 3D" if proc == "paint.exe" else "MS Paint"
-        return f"Creative - {app} (Drawing)"
+        return "Paint - Drawing"
 
     # ── Windows Photos ────────────────────────────────────────────────────────
     if proc in ("photos.exe", "microsoft.photos.exe"):
-        if any(kw in title_lower for kw in ["video", "movie"]):
-            return "Entertainment - Photos"
-        if any(kw in title_lower for kw in ["edit", "crop", "filter", "enhance"]):
-            return "Creative - Photos"
-        return "Creative - Photos"
+        return "Photos - Viewing"
 
     # ── Windows Camera ────────────────────────────────────────────────────────
     if proc == "windowscamera.exe":
-        return "Creative - Camera (Photo/Video Capture)"
+        return "Camera - Photo/Video Capture"
 
     # ── Movies & TV / Streaming Apps ─────────────────────────────────────────
     if proc in ("video.ui.exe", "zunevideo.exe", "microsoftvideo.exe",
@@ -335,7 +298,7 @@ def detect_app_subactivity(
             "primevideo.exe": "Prime Video"
         }
         app = app_names.get(proc, "Movies & TV")
-        return f"Entertainment - {app} (Streaming)"
+        return f"{app} - Series"
 
     # ── Kodi / Plex / Jellyfin ───────────────────────────────────────────────
     if proc in ("kodi.exe", "plex.exe", "plexmediaplayer.exe", "jellyfin.exe", "emby.exe"):
@@ -343,18 +306,18 @@ def detect_app_subactivity(
                      "plexmediaplayer.exe": "Plex", "jellyfin.exe": "Jellyfin", "emby.exe": "Emby"}
         app = app_names.get(proc, "Media Center")
         if "music" in title_lower or "audio" in title_lower:
-            return f"Entertainment - {app} (Music)"
-        return f"Entertainment - {app} (Video)"
+            return f"{app} - Listening to Music"
+        return f"{app} - Watching Video"
 
     # ── Xbox App / Game Bar ───────────────────────────────────────────────────
     if proc in ("xbox.exe", "xboxapp.exe"):
         if "game pass" in title_lower:
-            return "Entertainment - Xbox (Game Pass)"
+            return "Xbox - Game Shopping"
         if "store" in title_lower or "shop" in title_lower:
-            return "Shopping - Xbox Store"
-        return "Entertainment - Xbox (Gaming)"
+            return "Xbox - Game Shopping"
+        return "Xbox - Gaming"
     if proc in ("gamebar.exe", "microsoftgameapp.exe", "xboxgamemonitorapp.exe"):
-        return "Entertainment - Xbox Game Bar (Recording/Overlay)"
+        return "Xbox Game Bar - Recording"
 
     # ── Music Players (foreground) ────────────────────────────────────────────
     if proc in ("aimp.exe", "foobar2000.exe", "musicbee.exe", "tidal.exe",
@@ -364,17 +327,15 @@ def detect_app_subactivity(
                      "deezer.exe": "Deezer", "itunes.exe": "iTunes",
                      "groove.exe": "Groove Music", "zunemusic.exe": "Groove Music"}
         app = app_names.get(proc, "Music Player")
-        if title and title_lower not in (proc.replace(".exe", ""), ""):
-            return f"Entertainment - {app} (Playing: {title[:40]})"
-        return f"Entertainment - {app} (Music)"
+        return f"{app} - Listening to Music"
 
     # ── Screen Recorders / Streaming ─────────────────────────────────────────
     if proc in ("bandicam.exe", "fraps.exe", "xsplit.exe", "shadowplay.exe"):
         app_names = {"bandicam.exe": "Bandicam", "fraps.exe": "FRAPS",
                      "xsplit.exe": "XSplit", "shadowplay.exe": "ShadowPlay"}
-        return f"Creative - {app_names.get(proc, 'Screen Recorder')} (Recording)"
+        return f"{app_names.get(proc, 'Screen Recorder')} - Screen Recording"
     if proc == "loom.exe":
-        return "Communication - Loom (Screen Recording)"
+        return "Loom - Screen Recording"
 
     # ── Screenshot Tools ──────────────────────────────────────────────────────
     if proc in ("snippingtool.exe", "screensketch.exe", "snipandsketchwm.exe",
@@ -384,7 +345,7 @@ def detect_app_subactivity(
             "snipandsketchwm.exe": "Snip & Sketch", "sharex.exe": "ShareX",
             "greenshot.exe": "Greenshot", "lightshot.exe": "Lightshot"
         }
-        return f"System - {app_names.get(proc, 'Screenshot Tool')} (Screenshot)"
+        return f"{app_names.get(proc, 'Screenshot Tool')} - Screenshot"
 
     # ── VPN Tools ─────────────────────────────────────────────────────────────
     if proc in ("nordvpn.exe", "expressvpn.exe", "protonvpn.exe",
@@ -394,21 +355,21 @@ def detect_app_subactivity(
             "protonvpn.exe": "ProtonVPN", "surfshark.exe": "Surfshark",
             "mullvad.exe": "Mullvad", "openvpn.exe": "OpenVPN", "wireguard.exe": "WireGuard"
         }
-        return f"Utility - {vpn_names.get(proc, 'VPN')} (VPN Active)"
+        return f"{vpn_names.get(proc, 'VPN')} - VPN Active"
 
     # ── Password Managers ─────────────────────────────────────────────────────
     if proc in ("bitwarden.exe", "keepass.exe", "1password.exe", "lastpass.exe"):
         pm_names = {"bitwarden.exe": "Bitwarden", "keepass.exe": "KeePass",
                     "1password.exe": "1Password", "lastpass.exe": "LastPass"}
-        return f"Utility - {pm_names.get(proc, 'Password Manager')} (Password Management)"
+        return f"{pm_names.get(proc, 'Password Manager')} - Password Management"
 
     # ── Security / Network Diagnostics ───────────────────────────────────────
     if proc == "malwarebytes.exe":
-        return "System - Malwarebytes (Security Scan)"
+        return "Malwarebytes - Security Scan"
     if proc == "wireshark.exe":
-        return "Development - Wireshark (Network Analysis)"
+        return "Wireshark - Network Analysis"
     if proc in ("putty.exe", "mobaxterm.exe"):
-        return f"Development - {proc.replace('.exe','').capitalize()} (SSH Session)"
+        return f"{proc.replace('.exe','').capitalize()} - SSH Session"
 
     # ── Virtual Machines ──────────────────────────────────────────────────────
     if proc in ("vmware.exe", "vmwareworkstation.exe", "virtualboxvm.exe",
@@ -418,27 +379,24 @@ def detect_app_subactivity(
             "virtualboxvm.exe": "VirtualBox", "virtualbox.exe": "VirtualBox",
             "hyperv.exe": "Hyper-V"
         }
-        return f"System - {vm_names.get(proc, 'VM')} (Virtual Machine)"
+        return f"{vm_names.get(proc, 'VM')} - Virtual Machine"
 
     # ── Remote Desktop ────────────────────────────────────────────────────────
     if proc == "mstsc.exe":
-        return "System - Remote Desktop (RDP Session)"
+        return "Remote Desktop - RDP Session"
     if proc == "anydesk.exe":
-        return "System - AnyDesk (Remote Session)"
+        return "AnyDesk - Remote Session"
     if proc == "teamviewer.exe":
-        return "System - TeamViewer (Remote Session)"
+        return "TeamViewer - Remote Session"
     if proc in ("vnc.exe", "vncviewer.exe"):
-        return "System - VNC (Remote Session)"
+        return "VNC - Remote Session"
 
     # ── E-Readers ─────────────────────────────────────────────────────────────
     if proc in ("kindle.exe", "calibre.exe", "bookviser.exe", "kobo.exe"):
         app_names = {"kindle.exe": "Kindle", "calibre.exe": "Calibre",
                      "bookviser.exe": "Bookviser", "kobo.exe": "Kobo"}
         app = app_names.get(proc, "eBook Reader")
-        if title and title_lower not in (app.lower(), ""):
-            book_title = title.split(" - ")[0].strip()[:50]
-            return f"Learning - {app} (Reading: {book_title})"
-        return f"Learning - {app} (Book Reading)"
+        return f"{app} - Reading"
 
     # ── Game Engines ──────────────────────────────────────────────────────────
     if proc in ("unity.exe", "unreal.exe", "unrealengine.exe", "godot.exe", "gamemaker.exe"):
@@ -448,36 +406,36 @@ def detect_app_subactivity(
         }
         engine = engine_names.get(proc, "Game Engine")
         if any(kw in title_lower for kw in ["render", "build", "compile"]):
-            return f"Development - {engine} (Building/Rendering)"
+            return f"{engine} - Building"
         if any(kw in title_lower for kw in ["editor", "scene"]):
-            return f"Development - {engine} (Scene Editor)"
-        return f"Development - {engine} (Game Development)"
+            return f"{engine} - Scene Editor"
+        return f"{engine} - Game Development"
 
     # ── 3D / CAD / Photo ─────────────────────────────────────────────────────
     if proc in ("autocad.exe", "acad.exe"):
-        return "Creative - AutoCAD (CAD Design)"
+        return "AutoCAD - CAD Design"
     if proc == "fusion360.exe":
-        return "Creative - Fusion 360 (3D CAD/Design)"
+        return "Fusion 360 - 3D CAD Design"
     if proc in ("maya.exe", "cinema4d.exe", "houdini.exe", "3dsmax.exe"):
         app_names = {"maya.exe": "Maya", "cinema4d.exe": "Cinema 4D",
                      "houdini.exe": "Houdini", "3dsmax.exe": "3ds Max"}
-        return f"Creative - {app_names.get(proc, '3D App')} (3D Modeling)"
+        return f"{app_names.get(proc, '3D App')} - 3D Modeling"
     if proc == "zbrush.exe":
-        return "Creative - ZBrush (3D Sculpting)"
+        return "ZBrush - 3D Sculpting"
     if proc in ("lightroom.exe", "lightroomclassic.exe"):
-        return "Creative - Lightroom (Photo Editing)"
+        return "Lightroom - Photo Editing"
     if proc in ("irfanview.exe", "xnviewmp.exe", "faststone.exe", "jpegview.exe"):
-        return "Creative - Image Viewer (Photo Browsing)"
+        return "Image Viewer - Photo Browsing"
     if proc in ("rawtherapee.exe", "darktable.exe"):
-        return "Creative - RAW Photo Editor"
+        return "RAW Editor - Photo Editing"
 
     # ── Utilities ─────────────────────────────────────────────────────────────
     if proc == "powertoys.exe":
-        return "Utility - PowerToys (Windows Utilities)"
+        return "PowerToys - Windows Utilities"
     if proc == "autohotkey.exe":
-        return "Utility - AutoHotkey (Automation/Macro)"
+        return "AutoHotkey - Automation"
     if proc in ("everything.exe", "flow.launcher.exe", "keypirinha.exe"):
-        return "Utility - File/App Search"
+        return "File Explorer - Searching"
     if proc in ("rufus.exe", "etcher.exe"):
         return "System - USB Boot Creator"
     if proc in ("cpu-z.exe", "gpu-z.exe", "hwinfo64.exe", "hwmonitor.exe",
@@ -521,12 +479,6 @@ def detect_app_subactivity(
 # ===========================================================================
 # 3. classify_browser_tab — domain-aware browser classification
 # ===========================================================================
-# --- Dynamic Browser Rules (Revised) ---
-
-_SHOPPING_DOMAINS = ["amazon", "flipkart", "ebay", "aliexpress", "olx", "daraz", "alibaba", "walmart", "target"]
-_SHOPPING_KEYWORDS = ["buy", "shop", "cart", "checkout", "product", "price"]
-
-_RESEARCH_DOMAINS = ["arxiv", "ieee", "pubmed", "sciencedirect", "springer", "jstor", "researchgate", "scholar", "acm.org"]
 _RESEARCH_KEYWORDS = ["paper", "article", "journal", "conference", "proceedings"]
 
 _EMAIL_DOMAINS = ["gmail", "outlook", "mail.yahoo", "protonmail"]
@@ -557,99 +509,295 @@ def classify_browser_tab(
     browser_name: str = "Browser",
 ) -> str:
     """
-    Dynamic Browser Classification Engine.
-    Evaluates Domain + Title Keywords against a prioritized rule set.
+    Deep Browser Classification Engine — Site-Specific + Intent-Specific.
+    Outputs labels like: YouTube - Video, Amazon - Product Browsing, GitHub - PR Review
     """
     t = (page_title or "").lower()
     
-    # 1. Title Normalization (strip common suffixes to avoid interference)
+    # 1. Title Normalization (strip browser suffixes)
     for suffix in ["google chrome", "microsoft edge", "firefox", "brave", "opera", "safari"]:
         t = t.replace(f" - {suffix}", "").replace(f" | {suffix}", "").strip()
 
-    # Special Cases - Google / Microsoft
+    # ── YouTube (Deep) ───────────────────────────────────────────────────
+    if "youtube.com" in domain or "youtu.be" in domain or "youtube" in t:
+        if "shorts" in t or "#shorts" in t:
+            return "YouTube - Shorts"
+        if "live" in t or "🔴" in t:
+            return "YouTube - Live"
+        if any(k in t for k in ["music", "song", "lyrics", "audio"]):
+            return "YouTube - Music"
+        if any(k in t for k in ["@", "podcast", "tutorial", "course", "lecture", "how to", "learn"]):
+            return "YouTube - Tutorial"
+        if any(k in t for k in ["youtube", "youtube.com", "my channel", "subscriptions", "search", "results", "channel", "subscribe"]):
+            return "YouTube - Browsing"
+        return "YouTube - Video"
+
+    # ── Netflix ──────────────────────────────────────────────────────────
+    if "netflix.com" in domain or "netflix" in t:
+        if any(k in t for k in ["movie", "film"]):
+            return "Netflix - Movie"
+        if any(k in t for k in ["episode", "season"]) or (t != "netflix" and "browse" not in t):
+            return "Netflix - Watching"
+        return "Netflix - Browsing"
+    if any(k in t for k in ["hotstar", "disney+", "disneyplus"]):
+        return "Disney+ - Watching"
+    if any(k in t for k in ["prime video", "primevideo"]):
+        return "Prime Video - Watching"
+
+    # ── Amazon / Shopping ────────────────────────────────────────────────
+    if "amazon" in domain or "amazon" in t:
+        if any(k in t for k in ["checkout", "payment", "place order", "buy now"]):
+            return "Amazon - Checkout"
+        if any(k in t for k in ["your orders", "track", "delivery"]):
+            return "Amazon - Order Tracking"
+        if "search" in t or "results" in t:
+            return "Amazon - Searching"
+        return "Amazon - Shopping"
+
+    shopping_domains = ["flipkart.com", "ebay.com", "daraz.pk", "aliexpress.com", "olx.com", "walmart.com"]
+    if any(d in domain for d in shopping_domains) or any(s in t for s in ["flipkart", "ebay", "daraz", "olx", "aliexpress", "walmart"]):
+        site_map = [
+            ("olx", "OLX"), ("daraz", "Daraz"), ("flipkart", "Flipkart"),
+            ("ebay", "eBay"), ("walmart", "Walmart"), ("aliexpress", "AliExpress"),
+        ]
+        site = "Shopping"
+        for keyword, name in site_map:
+            if keyword in domain or keyword in t:
+                site = name
+                break
+        if any(k in t for k in ["checkout", "payment", "cart"]):
+            return f"{site} - Checkout"
+        return f"{site} - Shopping"
+
+    # ── GitHub ───────────────────────────────────────────────────────────
+    if "github.com" in domain or "github" in t:
+        if any(k in t for k in ["pull request", "/pull/", "pr #"]):
+            return "GitHub - PR Review"
+        if "issue" in t or "/issues/" in t:
+            return "GitHub - Issue"
+        if "commit" in t or "history" in t:
+            return "GitHub - Commit"
+        if any(k in t for k in [".py", ".js", ".ts", ".java", ".cpp", "blob/"]):
+            return "GitHub - Code"
+        return "GitHub - Browsing"
+
+    # ── Stack Overflow ───────────────────────────────────────────────────
+    if "stackoverflow.com" in domain or "stack overflow" in t:
+        if "answer" in t:
+            return "Stack Overflow - Answering"
+        return "Stack Overflow - Problem Solving"
+
+    # ── Gmail / Email ────────────────────────────────────────────────────
+    if any(d in t for d in ["gmail", "inbox"]):
+        if "compose" in t or "new message" in t or "draft" in t:
+            return "Gmail - Composing"
+        if "search" in t:
+            return "Gmail - Searching"
+        return "Gmail - Reading"
+    if any(d in t for d in ["outlook", "mail.yahoo", "protonmail"]):
+        return "Outlook - Reading"
+
+    # ── Google Docs / Sheets / Slides / Drive ────────────────────────────
     if "docs.google" in t or "google docs" in t or "word online" in t:
-        return "Work - Documentation"
+        if "comment" in t or "suggest" in t:
+            return "Google Docs - Reviewing"
+        return "Google Docs - Writing"
     if "sheets.google" in t or "google sheets" in t or "excel online" in t:
-        return "Work - Data Analysis"
+        return "Google Sheets - Editing"
     if "slides.google" in t or "google slides" in t or "powerpoint online" in t:
-        return "Work - Presentation"
-    if "meet.google" in t or "google meet" in t or "zoom" in t:
-        return "Communication - Video Call"
-    if "calendar" in t and ("google" in t or "outlook" in t):
-        return "Work - Planning"
+        return "Google Slides - Editing"
+    if "drive.google" in t or "google drive" in t:
+        return "Google Drive - Browsing"
+
+    # ── Google Meet / Zoom / Teams ────────────────────────────────────────
+    if any(k in t for k in ["meet.google", "google meet", "online meeting"]):
+        return "Google Meet - Meeting"
+    # Google Meet often shows just "Meet" or "Meeting in progress" in the title
+    if t.startswith("meet") and ("google" in t or len(t.split()) <= 3):
+        return "Google Meet - Meeting"
+    if "zoom" in t:
+        return "Zoom - Meeting"
     if "teams" in t:
-        return "Communication - Meeting"
-        
-    # PDF
-    if t.endswith(".pdf") or "pdf" in t:
-        return "Research - Reading Paper"
-        
-    # New Tab
-    if "new tab" in t or not t:
-        return "Browsing - Web"
-        
-    # Check Shopping
-    if any(d in t for d in _SHOPPING_DOMAINS) or any(k in t for k in _SHOPPING_KEYWORDS):
-        return "Shopping - Ecommerce"
-        
-    # Check Research
-    if any(d in t for d in _RESEARCH_DOMAINS) or any(k in t for k in _RESEARCH_KEYWORDS):
-        return "Research - Academic"
-        
-    # Check Email
-    if any(d in t for d in _EMAIL_DOMAINS):
-        return "Communication - Email"
-        
-    # Check Entertainment - Video / Music
-    if "youtube" in t:
-        if "music" in t or "song" in t or "hale dil" in t:
-            return "Entertainment - Music"
-        return "Entertainment - Video"
-        
-    if any(d in t for d in _VIDEO_DOMAINS) or any(k in t for k in _VIDEO_KEYWORDS):
-        return "Entertainment - Video"
-        
-    if any(d in t for d in _MUSIC_DOMAINS):
-        return "Entertainment - Music"
-        
-    # Check Learning
-    if any(d in t for d in _LEARNING_DOMAINS):
-        return "Learning - Tutorial"
-        
-    # Check Development
-    if "github" in t:
-        return "Development - GitHub"
-    if any(d in t for d in _DEV_DOMAINS):
-        return "Development - Coding Reference"
-        
-    # Check Social Media
-    if any(d in t for d in _SOCIAL_DOMAINS):
-        if "chat" in t or "discord" in t:
-            return "Social Media - Chat"
-        return "Social Media - Browsing"
-        
-    # Check News
+        return "Teams - Meeting"
+    if "calendar" in t and ("google" in t or "outlook" in t):
+        return "Google Docs - Collaboration"
+    
+    # ── Kaggle / DS Notebooks ─────────────────────────────────────────────
+    if "kaggle.com" in domain or "kaggle" in t:
+        if "notebook" in t or "editor" in t or "kernel" in t:
+            return "Kaggle - Notebook"
+        if "dataset" in t:
+            return "Kaggle - Dataset"
+        if "competition" in t:
+            return "Kaggle - Competition"
+        return "Kaggle - Browsing"
+
+    # ── arXiv / Research ─────────────────────────────────────────────────
+    if "arxiv" in t:
+        if "abs/" in t or "abstract" in t:
+            return "arXiv - Reading Abstract"
+        if "search" in t or "list" in t:
+            return "arXiv - Searching Papers"
+        return "arXiv - Reading Paper"
+    if any(d in t for d in _RESEARCH_DOMAINS):
+        return "arXiv - Reading Paper"
+
+    # ── Learning Platforms ───────────────────────────────────────────────
+    if "coursera" in t:
+        if "quiz" in t or "exam" in t or "assignment" in t:
+            return "Coursera - Quiz"
+        if "discussion" in t or "forum" in t:
+            return "Coursera - Discussion"
+        return "Coursera - Lecture"
+    if "udemy" in t:
+        return "Udemy - Lecture"
+    if any(d in t for d in ["edx", "khanacademy", "khan academy"]):
+        return "Khan Academy - Lecture"
+    if "codecademy" in t:
+        return "Codecademy - Practice"
+    if "leetcode" in t:
+        if "contest" in t:
+            return "LeetCode - Contest"
+        if "discuss" in t:
+            return "LeetCode - Discussion"
+        if any(k in t for k in ["problem", "solution"]):
+            return "LeetCode - Coding Practice"
+        return "LeetCode - Coding Practice"
+    if "hackerrank" in t:
+        return "HackerRank - Practice"
+
+    # ── Reddit ───────────────────────────────────────────────────────────
+    if "reddit" in t:
+        if "comment" in t:
+            return "Reddit - Comments"
+        if any(k in t for k in ["r/", "post", "thread"]):
+            return "Reddit - Post"
+        return "Reddit - Browsing"
+
+    # ── Twitter/X ────────────────────────────────────────────────────────
+    if any(d in domain for d in ["twitter.com", "x.com", "threads.net"]) or any(k in t for k in ["twitter", "x.com", "threads"]):
+        if any(k in t for k in ["compose", "tweet", "post"]):
+            return "Twitter - Composing"
+        if "thread" in t:
+            return "Twitter - Thread"
+        return "Twitter - Browsing"
+
+    # ── LinkedIn ─────────────────────────────────────────────────────────
+    if "linkedin" in t:
+        if "job" in t or "career" in t or "apply" in t:
+            return "LinkedIn - Job Hunting"
+        if "message" in t or "messaging" in t:
+            return "LinkedIn - Networking"
+        return "LinkedIn - Browsing"
+
+    # ── Social Media (other) ─────────────────────────────────────────────
+    if "instagram" in t:
+        return "Instagram - Browsing"
+    if "facebook" in t:
+        return "Facebook - Browsing"
+    if "tiktok" in t:
+        return "TikTok - Browsing"
+    if "snapchat" in t:
+        return "Snapchat - Browsing"
+
+    # ── Figma / Canva ────────────────────────────────────────────────────
+    if "figma" in t:
+        if "prototype" in t:
+            return "Figma - Prototyping"
+        return "Figma - Designing"
+    if "canva" in t:
+        return "Canva - Designing"
+
+    # ── Twitch ───────────────────────────────────────────────────────────
+    if "twitch" in t:
+        if "chat" in t:
+            return "Twitch - Chatting"
+        if "browse" in t or "directory" in t:
+            return "Twitch - Browsing"
+        return "Twitch - Watching"
+
+    # ── Spotify (Web) ────────────────────────────────────────────────────
+    if "spotify" in t:
+        if "podcast" in t:
+            return "Spotify - Podcast"
+        if "playlist" in t:
+            return "Spotify - Playlist"
+        return "Spotify - Music"
+
+    # ── Wikipedia ────────────────────────────────────────────────────────
+    if "wikipedia" in t:
+        if "search" in t:
+            return "Wikipedia - Searching"
+        return "Wikipedia - Reading"
+
+    # ── Medium ───────────────────────────────────────────────────────────
+    if "medium" in t:
+        if "write" in t or "draft" in t or "new story" in t:
+            return "Medium - Writing"
+        return "Medium - Reading"
+
+    # ── Quora ────────────────────────────────────────────────────────────
+    if "quora" in t:
+        return "Wikipedia - Reading"
+
+    # ── Financial / Trading ──────────────────────────────────────────────
+    if "tradingview" in t:
+        return "TradingView - Market Analysis"
+    if "binance" in t:
+        return "Binance - Trading"
+    if any(d in t for d in ["banking", "bank", "icici", "hdfc", "chase", "wellsfargo"]):
+        if any(k in t for k in ["transfer", "pay", "send"]):
+            return "Banking - Transaction"
+        if any(k in t for k in ["statement", "history"]):
+            return "Banking - Statement"
+        return "Banking - Account"
+    if "paypal" in t:
+        return "PayPal - Account"
+
+    # ── News ─────────────────────────────────────────────────────────────
     if any(d in t for d in _NEWS_DOMAINS):
         return "News - Reading"
-        
-    # Check Work
-    if any(d in t for d in _WORK_DOMAINS) or "figma" in t or "canva" in t:
-        if "figma" in t or "canva" in t:
-             return "Creative - Design"
-        if "trello" in t or "jira" in t:
-             return "Work - Planning"
-        return "Work - Documentation"
-        
-    # Check Financial
-    if any(d in t for d in _FINANCIAL_DOMAINS):
-        return "Financial - Banking"
-        
-    # Check Info
-    if any(d in t for d in _INFO_DOMAINS):
-        return "Information - Reading"
-        
-    # Default fallthrough
-    return "Browsing - Web"
+
+    # ── AI Assistants ────────────────────────────────────────────────────
+    if any(k in t for k in ["chatgpt", "claude", "gemini", "perplexity", "copilot"]):
+        return "ChatGPT - AI Chat"
+
+    # ── Messaging ────────────────────────────────────────────────────────
+    if "whatsapp" in t:
+        return "WhatsApp - Chat"
+    if "telegram" in t:
+        return "Telegram - Chat"
+    if "slack" in t:
+        return "Slack - Chat"
+
+    # ── Notion / Work tools ──────────────────────────────────────────────
+    if "notion" in t:
+        return "Notion - Note Taking"
+    if "trello" in t or "jira" in t:
+        return "Notion - Project Management"
+
+    # ── CodePen / StackBlitz ─────────────────────────────────────────────
+    if any(k in t for k in ["codepen", "stackblitz", "codesandbox"]):
+        return "LeetCode - Coding Practice"
+
+    # ── PDF ──────────────────────────────────────────────────────────────
+    if t.endswith(".pdf") or "pdf" in t:
+        return "arXiv - Reading Paper"
+
+    # ── New Tab / Empty ──────────────────────────────────────────────────
+    if "new tab" in t or not t:
+        return "Browser - Web"
+
+    # ── Shopping keyword fallback ────────────────────────────────────────
+    if any(k in t for k in ["buy", "shop", "cart", "checkout", "product", "price"]):
+        return "Amazon - Shopping"
+
+    # ── Research keyword fallback ────────────────────────────────────────
+    if any(k in t for k in ["paper", "article", "journal", "conference"]):
+        return "arXiv - Reading Paper"
+
+    # ── Default: return None so CLIP/OCR pipeline can analyze ─────────────
+    return None
 
 def detect_idle_nuance(
     signals,               # BehavioralSignals
@@ -663,17 +811,17 @@ def detect_idle_nuance(
     # Route C - Background Processes Priority Check
     bg_lower = " ".join(bg).lower()
     if "download" in bg_lower or "torrent" in bg_lower:
-        return "Background - Downloading"
+        return "Idle - Away from Keyboard"
     if "update" in bg_lower:
-        return "Background - System Update"
+        return "Idle - Away from Keyboard"
     if "scan" in bg_lower or "antivirus" in bg_lower or "defender" in bg_lower:
-        return "Background - Security Scan"
+        return "Idle - Away from Keyboard"
     if "copy" in bg_lower or "transfer" in bg_lower:
-        return "Background - File Transfer"
+        return "Idle - Away from Keyboard"
     if "render" in bg_lower:
-        return "Background - Rendering"
+        return "Idle - Away from Keyboard"
     if "build" in bg_lower or "compile" in bg_lower:
-        return "Background - Building"
+        return "Idle - Away from Keyboard"
 
     # Route D - Passive/Idle state based on last activity
     lp = (last_primary_label or "").lower()
@@ -838,28 +986,13 @@ def _terminal_display_name(proc: str) -> str:
 
 
 def _classify_vscode(proc: str, title: str, title_lower: str, ocr_text: str) -> str:
-    """Classify VS Code with Deep Context."""
-    # Build/Debug/Git commands from OCR or Title
+    """VS Code: Coding / Debugging / Version Control."""
     full_text = f"{title_lower} {ocr_text.lower()}"
     if "debug" in full_text or "breakpoint" in full_text:
-        return "Development - Debugging"
-    if any(k in full_text for k in ["git", "pull request", "merge"]):
-        return "Development - Code Review"
-    if any(k in full_text for k in ["build", "compile", "make"]):
-        return "Development - Building"
-    if any(k in full_text for k in ["npm ", "pip ", "conda "]):
-        return "Development - Package Management"
-    
-    # Extension-based
-    ext = _extract_vscode_lang(title)
-    if ext:
-        if ext.lower() in ["markdown", "text"]:
-            return "Work - Writing Documentation"
-        if ext.lower() in ["jupyter", "jupyter notebook"]:
-            return "Data Science - Jupyter Notebook"
-        return f"Development - Coding in {ext}"
-    
-    return "Development - VS Code"
+        return "VS Code - Debugging"
+    if any(k in full_text for k in ["git", "pull request", "merge", "commit"]):
+        return "VS Code - Version Control"
+    return "VS Code - Coding"
 
 
 def _extract_vscode_lang(title: str) -> Optional[str]:
@@ -882,100 +1015,83 @@ def _extract_vscode_file(title: str) -> Optional[str]:
 
 
 def _classify_jetbrains(proc: str, title: str, title_lower: str, ocr_text: str) -> str:
-    """Classify JetBrains IDEs."""
+    """JetBrains: [IDE] - Coding / Debugging."""
     ide_map = {
         "pycharm64.exe": "PyCharm",
         "idea64.exe":    "IntelliJ",
-        "webstorm64.exe":"IntelliJ",
-        "rider64.exe":   "IntelliJ",
-        "clion64.exe":   "IntelliJ",
-        "phpstorm64.exe":"IntelliJ",
-        "goland64.exe":  "IntelliJ",
-        "datagrip64.exe":"IntelliJ",
+        "webstorm64.exe":"WebStorm",
+        "rider64.exe":   "Rider",
+        "clion64.exe":   "CLion",
+        "phpstorm64.exe":"PhpStorm",
+        "goland64.exe":  "GoLand",
+        "datagrip64.exe":"DataGrip",
     }
-    return f"Work - {ide_map.get(proc, 'IntelliJ')}"
+    ide = ide_map.get(proc, "IntelliJ")
+    full_text = f"{title_lower} {ocr_text.lower()}"
+    if "debug" in full_text or "breakpoint" in full_text:
+        return f"{ide} - Debugging"
+    return f"{ide} - Coding"
 
 
 def _classify_discord(title: str, title_lower: str) -> str:
-    """Classify Discord with Deep Context."""
-    # Voice/Screen/Typing heuristics from title
+    """Discord: Chat / Voice / Voice Gaming."""
     if "voice connected" in title_lower or "rtc connected" in title_lower:
-        return "Communication - Discord Voice Chat"
+        if any(k in title_lower for k in ["game", "gaming", "play"]):
+            return "Discord - Voice Gaming"
+        return "Discord - Voice"
     if "screen share" in title_lower or "live" in title_lower:
-        return "Collaboration - Screen Sharing"
-    if "typing" in title_lower or "#" in title_lower or "@" in title_lower:
-        return "Communication - Discord Text Chat"
-    return "Communication - Discord"
+        return "Discord - Voice"
+    return "Discord - Chat"
 
 
 def _classify_zoom(title: str, title_lower: str) -> str:
-    """Classify Zoom meeting context."""
+    """Zoom: Meeting / Screen Share."""
     if "presenting" in title_lower or "sharing" in title_lower:
-        return "Meeting - Presenting"
-    if "chat" in title_lower:
-        return "Meeting - Chatting"
-    if "webinar" in title_lower:
-        return "Meeting - Active Participant"
-    return "Meeting - In Call"
+        return "Zoom - Screen Share"
+    return "Zoom - Meeting"
 
 
 def _classify_teams(title: str, title_lower: str) -> str:
-    """Classify Microsoft Teams context."""
-    if "presenting" in title_lower or "sharing" in title_lower:
-        return "Meeting - Presenting"
-    if "chat" in title_lower:
-        return "Meeting - Chatting"
-    return "Meeting - In Call"
+    """Teams: Chat / Meeting."""
+    if "chat" in title_lower or "message" in title_lower:
+        return "Teams - Chat"
+    return "Teams - Meeting"
 
 
 def _classify_excel(title: str, title_lower: str, ocr_text: str) -> str:
-    """Classify Excel."""
-    return "Work - Excel"
+    """Excel: Data Entry / Analysis."""
+    full_text = f"{title_lower} {ocr_text.lower()}"
+    if any(k in full_text for k in ["formula", "pivot", "analysis", "vlookup", "chart", "graph"]):
+        return "Excel - Analysis"
+    return "Excel - Data Entry"
 
 
 def _classify_word(title: str, title_lower: str) -> str:
-    """Classify Word."""
-    if "document" in title_lower or "docx" in title_lower:
-        return "Work - Microsoft Word"
-    return "Work - Microsoft Word"
+    """Classify Word with App-Specific + Intent-Specific labels."""
+    if any(k in title_lower for k in ["review", "track change", "comment"]):
+        return "Word - Reviewing"
+    if any(k in title_lower for k in ["print", "layout", "format"]):
+        return "Word - Formatting"
+    return "Word - Writing"
 
 
 def _classify_spotify(title: str, title_lower: str) -> str:
-    """Classify Spotify."""
-    if "paused" in title_lower:
-        return "Media - Paused"
+    """Spotify: always [App] - [Intent]."""
     if "podcast" in title_lower:
-        return "Information - Podcast"
-    if title_lower and title_lower not in ["spotify", "spotify premium", "spotify free"]:
-        return "Media - Active Listening"
-    return "Media - Spotify"
+        return "Spotify - Podcast"
+    return "Spotify - Music"
 
 
 def _classify_terminal(proc: str, title: str, title_lower: str, ocr_text: str) -> str:
-    """Classify terminal with Deep Context."""
-    full_text = f"{title_lower} {ocr_text.lower()}"
-    if "git " in full_text or "commit" in full_text:
-        return "Development - Git Operations"
-    if "docker" in full_text or "kubectl" in full_text:
-        return "Development - Container Management"
-    if any(k in full_text for k in ["npm ", "pip ", "conda "]):
-        return "Development - Package Management"
-    if "ssh " in full_text:
-        return "Development - Remote Server"
-    if "cd " in full_text or "dir " in full_text or "ls " in full_text:
-        return "System - File Navigation"
-    return "System - Terminal"
+    """Terminal: always [App] - [Intent]."""
+    return "Terminal - Command"
 
 
 def _classify_explorer(title: str, title_lower: str) -> str:
-    """Classify File Explorer context."""
-    if any(k in title_lower for k in ["copying", "moving", "transferring", "% complete", "calculating"]):
-        return "System - Transferring Files"
-    if "search" in title_lower or "results in" in title_lower:
-        return "System - Searching Files"
-    if "organize" in title_lower or "rename" in title_lower:
-        return "System - Organizing Files"
-    return "System - Browsing Files"
+    """File Explorer: always [App] - [Intent]."""
+    if any(k in title_lower for k in ["copying", "moving", "transferring", "% complete"]):
+        return "File Explorer - Managing"
+    return "File Explorer - Browsing"
 
 
 def _refine_youtube_label(page_title: str, base_label: str) -> str:
@@ -985,9 +1101,9 @@ def _refine_youtube_label(page_title: str, base_label: str) -> str:
 
 def match_universal_keywords(text: str) -> Optional[str]:
     """
-    Catch-all keyword engine that scans any text (Window Title, OCR, Title)
-    for high-intent keywords across all taxonomy categories.
-    Returns standardized '[Category] - [Specific Activity]'.
+    Catch-all keyword engine — App-Specific + Intent-Specific.
+    Scans any text (Window Title, OCR, Title) for high-intent keywords.
+    Returns standardized '[App] - [Specific Intent]' labels.
     """
     if not text or len(text) < 3:
         return None
@@ -995,74 +1111,98 @@ def match_universal_keywords(text: str) -> Optional[str]:
     t = text.lower()
     
     # ── Financial / Trading ──────────────────────────────────────────────────
-    if any(kw in t for kw in ["candlestick", "order book", "leverage", "margin", "pnl", "long/short", "tradingview", "binance", "metatrader", "forex", "stock market", "share price", "portfolio", "bitcoin", "crypto"]):
-        return "Financial - Banking" # Using Banking as the subcategory from taxonomy
+    if any(kw in t for kw in ["tradingview", "metatrader"]):
+        return "TradingView - Market Analysis"
+    if any(kw in t for kw in ["binance", "coinbase"]):
+        return "Binance - Trading"
+    if any(kw in t for kw in ["candlestick", "order book", "leverage", "margin", "pnl",
+                               "forex", "stock market", "share price", "portfolio", "bitcoin", "crypto"]):
+        return "TradingView - Market Analysis"
     
     # ── Shopping / E-Commerce ───────────────────────────────────────────────
-    if any(kw in t for kw in ["daraz", "amazon", "ebay", "walmart", "checkout", "shopping cart", "add to cart", "buy now"]):
-        return "Shopping - E-commerce"
+    if any(kw in t for kw in ["daraz"]):
+        return "Daraz - Shopping"
+    if any(kw in t for kw in ["amazon"]):
+        return "Amazon - Shopping"
+    if any(kw in t for kw in ["ebay"]):
+        return "eBay - Shopping"
+    if any(kw in t for kw in ["checkout", "shopping cart", "add to cart", "buy now"]):
+        return "Amazon - Checkout"
 
     # ── Entertainment ──────────────────────────────────────────────────────────
-    if any(kw in t for kw in ["netflix"]):
-        return "Entertainment - Netflix"
-    if any(kw in t for kw in ["youtube", "vimeo", "bilibili"]):
-        return "Entertainment - YouTube"
+    if "netflix" in t:
+        return "Netflix - Watching"
+    if any(kw in t for kw in ["youtube", "vimeo"]):
+        return "YouTube - Video"
     if any(kw in t for kw in ["twitch", "live stream"]):
-        return "Entertainment - Twitch"
-    if any(kw in t for kw in ["spotify", "soundcloud", "music"]):
-        return "Entertainment - Spotify"
+        return "Twitch - Watching"
+    if any(kw in t for kw in ["spotify", "soundcloud"]):
+        return "Spotify - Music"
     if any(kw in t for kw in ["gaming", "steam", "epic games", "roblox", "minecraft"]):
-        return "Gaming - Steam"
-    if any(kw in t for kw in ["reddit"]):
-        return "Social - Reddit"
-    if any(kw in t for kw in ["tiktok", "instagram", "facebook"]):
-        return "Social - Facebook/Instagram"
+        return "Steam - Gaming"
+    if "reddit" in t:
+        return "Reddit - Browsing"
+    if any(kw in t for kw in ["twitter", "x.com", "threads"]):
+        return "Twitter - Browsing"
+    if "tiktok" in t:
+        return "TikTok - Browsing"
+    if "instagram" in t:
+        return "Instagram - Browsing"
+    if "facebook" in t:
+        return "Facebook - Browsing"
     
     # ── Work / Productivity ────────────────────────────────────────────────
     if any(kw in t for kw in ["zoom meeting", "zoom"]):
-        return "Meeting - Video Call"
+        return "Zoom - Meeting"
     if any(kw in t for kw in ["teams call", "microsoft teams"]):
-        return "Meeting - Video Call"
-    if any(kw in t for kw in ["slack"]):
-        return "Communication - Slack"
-    if any(kw in t for kw in ["notion"]):
-        return "Work - Notion"
+        return "Teams - Meeting"
+    if "slack" in t:
+        return "Slack - Chat"
+    if "notion" in t:
+        return "Notion - Writing"
     if any(kw in t for kw in ["jira", "trello", "kanban"]):
-        return "Work - Project Management"
+        return "Jira - Project Management"
     if any(kw in t for kw in ["document", "proposal", "contract", "word"]):
-        return "Work - Microsoft Word"
+        return "Word - Writing"
     if any(kw in t for kw in ["spreadsheet", "invoice", "excel"]):
-        return "Work - Excel"
+        return "Excel - Data Entry"
     if any(kw in t for kw in ["presentation", "slides", "powerpoint"]):
-        return "Work - PowerPoint"
+        return "PowerPoint - Creating"
     
     # ── Research / Academic ────────────────────────────────────────────────
     if any(kw in t for kw in ["abstract", "references", "cite", "journal", "arxiv", "scholar", "pubmed"]):
-        return "Research - Reading Paper"
+        return "arXiv - Reading Paper"
     
     # ── Learning ─────────────────────────────────────────────────────────
     if any(kw in t for kw in ["tutorial", "how to", "lecture", "online course", "udemy", "coursera", "khan academy"]):
-        return "Learning - Coursera"
+        return "Coursera - Lecture"
     
     # ── Information / News / Search ────────────────────────────────────────
-    if any(kw in t for kw in ["breaking news", "opinion", "wikipedia", "quora", "news site"]):
-        return "Information - News Site"
+    if any(kw in t for kw in ["wikipedia", "quora"]):
+        return "Wikipedia - Reading"
+    if any(kw in t for kw in ["breaking news", "opinion", "news site"]):
+        return "News - Reading"
     
     # ── Development / Coding ───────────────────────────────────────────────
     if any(kw in t for kw in ["github", "gitlab"]):
-        return "Development - GitHub"
-    if any(kw in t for kw in ["vs code", "pycharm", "intellij", "jupyter", "coding", "debugger"]):
-        return "Development - Code Editor"
+        return "GitHub - Browsing"
+    if any(kw in t for kw in ["vs code", "pycharm", "intellij", "jupyter", "debugger"]):
+        return "VS Code - Coding"
     
     # ── Terminal / OCR ──────────────────────────────────────────────────
-    if any(kw in t for kw in [r"c:\users", r"ps c:\ ", "ubuntu@", "root@", "-bash", "npm install", "pip install", "docker run"]):
-        return "System - Terminal"
+    if any(kw in t for kw in [r"c:\users", r"ps c:\ ", "ubuntu@", "root@", "-bash",
+                               "npm install", "pip install", "docker run"]):
+        return "Terminal - Command"
     
     # ── Communication / AI ────────────────────────────────────────────────
     if any(kw in t for kw in ["chatgpt", "openai", "claude", "gemini", "bard", "perplexity", "ai chat"]):
-        return "Information - AI Assistant"
-    if any(kw in t for kw in ["whatsapp", "telegram", "messenger", "signal", "chat", "direct message"]):
-        return "Communication - Messaging"
+        return "ChatGPT - AI Chat"
+    if any(kw in t for kw in ["whatsapp"]):
+        return "WhatsApp - Chat"
+    if any(kw in t for kw in ["telegram"]):
+        return "Telegram - Chat"
+    if any(kw in t for kw in ["messenger", "signal", "direct message"]):
+        return "WhatsApp - Chat"
 
     return None
 
@@ -1070,26 +1210,26 @@ def match_universal_keywords(text: str) -> Optional[str]:
 
 def match_generic_keywords(title_lower: str) -> Optional[str]:
     """
-    Catch-all keyword matcher for titles. Consolidates with match_universal_keywords
-    for maximum coverage and consistency.
+    Catch-all keyword matcher for titles — App-Specific + Intent-Specific.
+    Consolidates with match_universal_keywords for maximum coverage.
     """
-    # 1. Broad universal check first (handles Trading, Shopping, etc. dynamically)
+    # 1. Broad universal check first
     universal = match_universal_keywords(title_lower)
     if universal:
         return universal
 
     # 2. Specific Windows/System overrides
     rules = [
-        (["microsoft store", "app store", "windows store", "ms store"], "System - Microsoft Store"),
-        (["windows settings", "system settings", "personalization", "display settings"], "System - Settings"),
-        (["calculator"], "System - Settings"),
-        (["snipping tool", "snip & sketch"], "System - File Explorer"),
-        (["alarms", "clock", "timer"], "System - Settings"),
-        (["lock screen", "screensaver", "afk", "sign in", "login"], "Idle - Locked Screen"),
-        (["file explorer", "this pc", "my computer", "documents", "downloads"], "System - File Explorer"),
-        (["task manager", "process explorer"], "System - Task Manager"),
-        (["powershell", "cmd", "command prompt", "terminal", "bash", "ubuntu", r"c:\\", r"d:\\", ".exe"], "Work - Terminal"),
-        (["python", "node", "npm ", "pip ", "conda "], "Work - Terminal"),
+        (["microsoft store", "app store", "windows store", "ms store"], "Microsoft Store - Browsing"),
+        (["windows settings", "system settings", "personalization", "display settings"], "Settings - Configuring"),
+        (["calculator"], "Calculator - Using"),
+        (["snipping tool", "snip & sketch"], "Snipping Tool - Screenshot"),
+        (["alarms", "clock", "timer"], "Clock - Using"),
+        (["lock screen", "screensaver", "afk", "sign in", "login"], "Idle - Locked"),
+        (["file explorer", "this pc", "my computer", "documents", "downloads"], "File Explorer - Browsing"),
+        (["task manager", "process explorer"], "Task Manager - Monitoring"),
+        (["powershell", "cmd", "command prompt", "terminal", "bash", "ubuntu", r"c:\\", r"d:\\", ".exe"], "Terminal - Command"),
+        (["python", "node", "npm ", "pip ", "conda "], "Terminal - Command"),
     ]
 
     t = title_lower.lower()

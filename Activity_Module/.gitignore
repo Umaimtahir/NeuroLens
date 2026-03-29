@@ -22,3 +22,6 @@ models/  # If you store model weights locally
 # OS files
 .DS_Store
 Thumbs.db
+
+# Generated output files
+verification_results*.txt

@@ -510,19 +510,16 @@ class ActivityClassifier:
             domain = app_signatures.extract_domain(window_title)
             label = label_engine.classify_browser_tab(domain or "", page_title, browser_name)
             if not label:
-                if browser_name not in ["Chrome", "Firefox", "Edge", "Safari", "Opera", "Brave"]:
-                    browser_name = "Chrome"
-                label = f"Browsing - {browser_name}"
+                label = "Browser - Web"
             
             
         # 3c. Gaming Fallback if controller is active
         if not label and signals.controller_active:
-            cat = "Gaming"
             if proc_name:
                 cleaned = proc_name.replace('.exe', '').title()
-                label = f"{cat} - {cleaned}"
+                label = f"{cleaned} - Gaming"
             else:
-                label = f"{cat} - Unknown Game"
+                label = "Game - Playing"
 
         # 3d. Generic Keyword Fallback
         if not label:
@@ -564,9 +561,9 @@ class ActivityClassifier:
         if not label or label == config.FALLBACK_ACTIVITY:
             if proc_name:
                 cleaned = proc_name.replace('.exe', '').title()
-                label = f"Unknown - {cleaned}"
+                label = f"{cleaned} - Unknown Activity"
             else:
-                label = "Unknown - Unknown App"
+                label = "Idle - Away from Keyboard"
         
         metrics["llm_ms"] = ms() - metrics["caption_ms"] - metrics["ocr_ms"] - (metrics.get("clip_ms", 0)) - metrics["capture_ms"] - metrics["signals_ms"]
         

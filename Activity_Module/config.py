@@ -39,18 +39,18 @@ VISUAL_GATE_ANCHORS = [
 ]
 
 CLIP_LABEL_MAP = {
-    "a video game with HUD or game interface":        "Entertainment - Gaming",
-    "a video player showing a movie or YouTube":      "Entertainment - YouTube",
-    "social media feed with posts and images":        "Entertainment - Social Media",
-    "music player application":                       "Entertainment - Spotify",
-    "a code editor or IDE with source code":          "Work - VS Code",
-    "a text document or word processor":              "Work - Microsoft Word",
-    "a spreadsheet with data and cells":              "Work - Excel",
-    "a video conference or online meeting":           "Work - Zoom Meeting",
-    "a PDF document or research paper":               "Research - arXiv",
-    "an online course or tutorial video":             "Learning - Coursera",
-    "a chat application with messages":               "Communication - Discord",
-    "a blank screen, desktop, or screensaver":        "Idle - AFK",
+    "a video game with HUD or game interface":        "Steam - Gaming",
+    "a video player showing a movie or YouTube":      "YouTube - Video",
+    "social media feed with posts and images":        "Twitter - Browsing Feed",
+    "music player application":                       "Spotify - Music",
+    "a code editor or IDE with source code":          "VS Code - Python Development",
+    "a text document or word processor":              "Word - Writing",
+    "a spreadsheet with data and cells":              "Excel - Data Entry",
+    "a video conference or online meeting":           "Zoom - Meeting",
+    "a PDF document or research paper":               "arXiv - Reading Paper",
+    "an online course or tutorial video":             "Coursera - Watching Lecture",
+    "a chat application with messages":               "Discord - Text Chat",
+    "a blank screen, desktop, or screensaver":        "Idle - Away from Keyboard",
 }
 
 # ---------------------------------------------------------------------------
@@ -71,30 +71,92 @@ QWEN_TEMPERATURE    = 0.05
 # Simplified Output Format: [Category] - [Specific Activity]
 # ---------------------------------------------------------------------------
 TAXONOMY = {
-    "Shopping": ["Shopping - Ecommerce"],
-    "Research": ["Research - Academic", "Research - Reading Paper"],
-    "Communication": ["Communication - Email", "Communication - Video Call", "Communication - Meeting"],
-    "Entertainment": ["Entertainment - Video", "Entertainment - Music"],
-    "Learning": ["Learning - Tutorial"],
-    "Development": ["Development - Coding Reference", "Development - GitHub", "Development - Code"],
-    "Social Media": ["Social Media - Browsing", "Social Media - Chat"],
-    "News": ["News - Reading"],
-    "Work": ["Work - Documentation", "Work - Data Analysis", "Work - Presentation", "Work - Planning"],
-    "Financial": ["Financial - Banking"],
-    "Information": ["Information - Reading"],
-    "Creative": ["Creative - Design"],
-    "Browsing": ["Browsing - Web"],
-    "System": ["System - Terminal", "System - File Explorer"],
-    "Gaming": ["Gaming - Steam", "Gaming - Epic Games"],
-    "Idle": ["Idle - System Idle"]
+    # Development Environments
+    "VS Code": ["Python Development", "JavaScript Development", "Java Development",
+                "Debugging", "Code Review", "Building", "Documentation", "Data Analysis", "Idle"],
+    "IntelliJ": ["Java Development", "Kotlin Development", "Debugging", "Building"],
+    "PyCharm": ["Python Development", "Django Development", "Debugging"],
+    "Android Studio": ["UI Design", "Coding", "Testing", "Debugging"],
+    "Visual Studio": ["C# Development", "Building", "Debugging"],
+    "Sublime Text": ["Editing"],
+    "Xcode": ["iOS Development", "UI Design", "Testing"],
+    # Terminal
+    "Terminal": ["Git Operations", "Package Installation", "Container Management",
+                 "Remote Server", "Python Script Execution", "Compilation",
+                 "File Navigation", "Building", "Command Line", "SSH Connection",
+                 "Docker Management", "System Management"],
+    # Browser-based
+    "YouTube": ["Video", "Shorts", "Browsing", "Searching", "Learning Video",
+                "Music Video", "Live Stream", "Channel Browsing"],
+    "Netflix": ["Movie", "Series", "Browsing"],
+    "Amazon": ["Product Browsing", "Checkout", "Searching", "Order Tracking"],
+    "GitHub": ["Code Review", "PR Review", "Issue Tracking", "Repository Browsing", "Version History"],
+    "Stack Overflow": ["Problem Solving", "Answering", "Searching"],
+    "Gmail": ["Reading Emails", "Composing Email", "Searching", "Configuration"],
+    "Google Docs": ["Writing", "Reading", "Reviewing", "Collaboration"],
+    "Google Sheets": ["Data Entry", "Analysis", "Visualization"],
+    "Google Drive": ["File Management", "Uploading"],
+    "arXiv": ["Reading Abstract", "Reading Paper", "Searching Papers"],
+    "Coursera": ["Watching Lecture", "Taking Quiz", "Doing Assignment", "Discussion"],
+    "Reddit": ["Browsing Feed", "Reading Post", "Reading Comments", "Posting"],
+    "Twitter": ["Browsing Feed", "Composing", "Reading Thread"],
+    "LinkedIn": ["Job Hunting", "Browsing", "Networking"],
+    "Wikipedia": ["Reading", "Searching"],
+    "Medium": ["Reading", "Writing"],
+    "Figma": ["UI Design", "Prototyping", "Collaboration"],
+    "Canva": ["Template Browsing", "Designing", "Exporting"],
+    "LeetCode": ["Coding Practice", "Discussion", "Contest"],
+    "Spotify": ["Listening to Music", "Searching", "Curating Playlist", "Listening Podcast"],
+    "Twitch": ["Watching Stream", "Chatting", "Browsing"],
+    "TradingView": ["Market Analysis"],
+    "Binance": ["Trading", "Portfolio Review"],
+    # Document & Office
+    "Word": ["Writing", "Reviewing", "Editing", "Formatting"],
+    "Excel": ["Data Entry", "Formula Editing", "Creating Charts", "Data Analysis", "VBA Programming"],
+    "PowerPoint": ["Creating Slides", "Presenting", "Organizing", "Adding Animations"],
+    "Notion": ["Note Taking", "Database Management", "Reading", "Project Management"],
+    "OneNote": ["Note Taking", "Clipping Content"],
+    "Obsidian": ["Writing Notes", "Knowledge Graph", "Configuration"],
+    # Creative
+    "Photoshop": ["Photo Editing", "Adding Text", "Layer Management", "Exporting"],
+    "Blender": ["3D Modeling", "Sculpting", "Animation", "Rendering"],
+    "Premiere Pro": ["Video Editing", "Adding Effects", "Exporting"],
+    "After Effects": ["Motion Graphics", "Animation"],
+    "DaVinci Resolve": ["Color Grading", "Video Editing"],
+    "Audacity": ["Audio Recording", "Audio Editing", "Audio Processing"],
+    "FL Studio": ["Beat Making", "Mixing"],
+    # Communication
+    "Discord": ["Text Chat", "Voice Chat", "Screen Sharing", "Gaming with Voice"],
+    "Slack": ["Team Chat", "Direct Message", "Reading Thread", "Voice Huddle"],
+    "Teams": ["Chat", "Meeting", "File Review"],
+    "WhatsApp": ["Messaging", "Voice Call"],
+    "Telegram": ["Messaging", "Reading Channel"],
+    "Zoom": ["Meeting", "Screen Sharing", "Breakout Session", "Chat", "Waiting"],
+    "Google Meet": ["Meeting", "Presenting", "Chat"],
+    # Entertainment
+    "YouTube Music": ["Listening"],
+    "VLC": ["Watching Video", "Listening to Music"],
+    "Steam": ["Browsing Games", "Game Shopping", "Gaming"],
+    "Epic Games": ["Gaming", "Browsing"],
+    # System
+    "File Explorer": ["Browsing Files", "Copying Files", "Searching", "File Properties"],
+    "Task Manager": ["Performance Monitoring", "Managing Processes"],
+    "Settings": ["System Configuration", "Customizing"],
+    "Microsoft Store": ["App Browsing", "Installing"],
+    # Gaming
+    "Game": ["Playing", "Menu", "Loading", "Watching Cutscene", "Matchmaking", "Paused"],
+    # Idle & Passive
+    "Idle": ["Away from Keyboard", "Screen Locked", "Screensaver"],
+    "Passive": ["Watching", "Listening"],
+    "Thinking": ["Paused"],
 }
 
 # In Hybrid mode, strict validation is relaxed to allow dynamic strings 
-# (e.g. "Development - Coding in Python + Background Music")
+# (e.g. "VS Code - Python Development + Background Music")
 VALID_TAXONOMY_LABELS = [
-    f"{cat} - {sub}"
-    for cat, subs in TAXONOMY.items()
-    for sub in subs
+    f"{app} - {intent}"
+    for app, intents in TAXONOMY.items()
+    for intent in intents
 ]
 
 # ---------------------------------------------------------------------------
@@ -130,91 +192,184 @@ TITLE_CACHE_TTL_SECONDS = 1.5   # Cache valid for 1.5s (matches polling interval
 # ---------------------------------------------------------------------------
 # Fallback
 # ---------------------------------------------------------------------------
-FALLBACK_ACTIVITY   = "Idle - System Idle"
+FALLBACK_ACTIVITY   = "Idle - Away from Keyboard"
 FALLBACK_CONFIDENCE = 0.0
 
 # ---------------------------------------------------------------------------
 # NeuroLens Content Type Codes (for Emotion Correlation)
 # ---------------------------------------------------------------------------
 CONTENT_TYPE_CODES = {
-    # Educational
-    "Educational - Research":           "EDU_RESEARCH",
-    "Research - Reading Paper":         "EDU_RESEARCH",
-    "Research - arXiv":                 "EDU_RESEARCH",
-    "Learning - Online Course":         "EDU_COURSE",
-    "Learning - Coursera":               "EDU_COURSE",
-    "Learning - Udemy":                 "EDU_COURSE",
+    # Educational / Research
+    "arXiv - Reading Abstract":          "EDU_RESEARCH",
+    "arXiv - Reading Paper":             "EDU_RESEARCH",
+    "arXiv - Searching Papers":          "EDU_RESEARCH",
+    "Wikipedia - Reading":               "EDU_RESEARCH",
+    "Wikipedia - Searching":             "EDU_RESEARCH",
+    "Coursera - Watching Lecture":        "EDU_COURSE",
+    "Coursera - Taking Quiz":            "EDU_COURSE",
+    "Coursera - Doing Assignment":       "EDU_COURSE",
+    "Coursera - Discussion":             "EDU_COURSE",
+    "LeetCode - Coding Practice":        "EDU_COURSE",
+    "LeetCode - Contest":                "EDU_COURSE",
     
-    # Professional
-    "Work - Coding":                    "PRO_CODING",
-    "Development - Coding":             "PRO_CODING",
-    "Work - VS Code":                   "PRO_CODING",
-    "Work - Document Work":             "PRO_DOCUMENT",
-    "Work - Microsoft Word":             "PRO_DOCUMENT",
-    "Work - Excel":                     "PRO_DOCUMENT",
-    "Work - Document":                   "PRO_DOCUMENT",
-    "Work - Notion":                    "PRO_DOCUMENT",
-    "Professional - Email":              "PRO_EMAIL",
-    "Work - Outlook":                   "PRO_EMAIL",
-    "Communication - Email":            "PRO_EMAIL",
-    "Professional - Meeting":            "PRO_MEETING",
-    "Work - Zoom Meeting":              "PRO_MEETING",
-    "Work - Teams Meeting":              "PRO_MEETING",
-    "Meeting - In Call":                "PRO_MEETING",
+    # Professional - Development
+    "VS Code - Python Development":      "PRO_CODING",
+    "VS Code - JavaScript Development":  "PRO_CODING",
+    "VS Code - Java Development":        "PRO_CODING",
+    "VS Code - Debugging":               "PRO_CODING",
+    "VS Code - Code Review":             "PRO_CODING",
+    "VS Code - Building":                "PRO_CODING",
+    "VS Code - Documentation":           "PRO_DOCUMENT",
+    "VS Code - Data Analysis":           "PRO_CODING",
+    "IntelliJ - Java Development":       "PRO_CODING",
+    "IntelliJ - Kotlin Development":     "PRO_CODING",
+    "IntelliJ - Debugging":              "PRO_CODING",
+    "PyCharm - Python Development":      "PRO_CODING",
+    "PyCharm - Django Development":      "PRO_CODING",
+    "PyCharm - Debugging":               "PRO_CODING",
+    "Android Studio - UI Design":        "PRO_CODING",
+    "Android Studio - Coding":           "PRO_CODING",
+    "Android Studio - Testing":          "PRO_CODING",
+    "Android Studio - Debugging":        "PRO_CODING",
+    "Visual Studio - C# Development":    "PRO_CODING",
+    "Visual Studio - Building":          "PRO_CODING",
+    "Visual Studio - Debugging":         "PRO_CODING",
+    "GitHub - Code Review":              "PRO_CODING",
+    "GitHub - PR Review":                "PRO_CODING",
+    "GitHub - Issue Tracking":           "PRO_CODING",
+    "GitHub - Repository Browsing":      "PRO_CODING",
+    "Stack Overflow - Problem Solving":  "PRO_CODING",
+    "Stack Overflow - Searching":        "PRO_CODING",
+    
+    # Professional - Documents
+    "Word - Writing":                    "PRO_DOCUMENT",
+    "Word - Reviewing":                  "PRO_DOCUMENT",
+    "Word - Editing":                    "PRO_DOCUMENT",
+    "Word - Formatting":                 "PRO_DOCUMENT",
+    "Excel - Data Entry":                "PRO_DOCUMENT",
+    "Excel - Formula Editing":           "PRO_DOCUMENT",
+    "Excel - Creating Charts":           "PRO_DOCUMENT",
+    "Excel - Data Analysis":             "PRO_DOCUMENT",
+    "Excel - VBA Programming":           "PRO_CODING",
+    "PowerPoint - Creating Slides":      "PRO_DOCUMENT",
+    "PowerPoint - Presenting":           "PRO_DOCUMENT",
+    "Google Docs - Writing":             "PRO_DOCUMENT",
+    "Google Docs - Reading":             "PRO_DOCUMENT",
+    "Google Docs - Reviewing":           "PRO_DOCUMENT",
+    "Google Sheets - Data Entry":        "PRO_DOCUMENT",
+    "Google Sheets - Analysis":          "PRO_DOCUMENT",
+    "Notion - Note Taking":              "PRO_DOCUMENT",
+    "Notion - Project Management":       "PRO_DOCUMENT",
+    "Obsidian - Writing Notes":          "PRO_DOCUMENT",
+    
+    # Professional - Email
+    "Gmail - Reading Emails":            "PRO_EMAIL",
+    "Gmail - Composing Email":           "PRO_EMAIL",
+    "Gmail - Searching":                 "PRO_EMAIL",
+    
+    # Professional - Meetings
+    "Zoom - Meeting":                    "PRO_MEETING",
+    "Zoom - Screen Sharing":             "PRO_MEETING",
+    "Zoom - Chat":                       "PRO_MEETING",
+    "Google Meet - Meeting":             "PRO_MEETING",
+    "Google Meet - Presenting":          "PRO_MEETING",
+    "Teams - Meeting":                   "PRO_MEETING",
+    "Teams - Chat":                      "PRO_MEETING",
     
     # Communication
-    "Communication - Messaging":         "COMM_CHAT",
-    "Communication - Discord Chat":     "COMM_CHAT",
-    "Communication - Slack":            "COMM_CHAT",
-    "Communication - Voice Chat":        "COMM_VOICE",
-    "Communication - Discord Voice":     "COMM_VOICE",
+    "Discord - Text Chat":               "COMM_CHAT",
+    "Discord - Voice Chat":              "COMM_VOICE",
+    "Discord - Screen Sharing":          "COMM_CHAT",
+    "Slack - Team Chat":                 "COMM_CHAT",
+    "Slack - Direct Message":            "COMM_CHAT",
+    "Slack - Voice Huddle":              "COMM_VOICE",
+    "WhatsApp - Messaging":              "COMM_CHAT",
+    "WhatsApp - Voice Call":             "COMM_VOICE",
+    "Telegram - Messaging":              "COMM_CHAT",
     
-    # Entertainment
-    "Entertainment - Video Streaming":   "ENT_VIDEO",
-    "Entertainment - YouTube":           "ENT_VIDEO",
-    "Entertainment - Netflix":           "ENT_VIDEO",
-    "Entertainment - Music":             "ENT_MUSIC",
-    "Entertainment - Spotify":           "ENT_MUSIC",
-    "Entertainment - Gaming":            "ENT_GAMING",
-    "Gaming - Unknown Game":             "ENT_GAMING",
-    "Entertainment - Social Media":      "ENT_SOCIAL",
-    "Social - Reddit":                  "ENT_SOCIAL",
-    "Social - Twitter":                 "ENT_SOCIAL",
+    # Entertainment - Video
+    "YouTube - Video":                   "ENT_VIDEO",
+    "YouTube - Shorts":                  "ENT_VIDEO",
+    "YouTube - Learning Video":          "ENT_VIDEO",
+    "YouTube - Live Stream":             "ENT_VIDEO",
+    "YouTube - Music Video":             "ENT_MUSIC",
+    "Netflix - Movie":                   "ENT_VIDEO",
+    "Netflix - Series":                  "ENT_VIDEO",
+    "Netflix - Browsing":                "ENT_VIDEO",
+    "Twitch - Watching Stream":          "ENT_VIDEO",
+    "VLC - Watching Video":              "ENT_VIDEO",
+    
+    # Entertainment - Music
+    "Spotify - Music":                   "ENT_MUSIC",
+    "Spotify - Podcast":                 "ENT_PODCAST",
+    "Spotify - Listening Podcast":       "ENT_MUSIC",
+    "Spotify - Curating Playlist":       "ENT_MUSIC",
+    "VLC - Listening to Music":          "ENT_MUSIC",
+    "YouTube Music - Listening":         "ENT_MUSIC",
+    
+    # Entertainment - Gaming
+    "Steam - Gaming":                    "ENT_GAMING",
+    "Epic Games - Gaming":               "ENT_GAMING",
+    
+    # Entertainment - Social
+    "Reddit - Browsing Feed":            "ENT_SOCIAL",
+    "Reddit - Reading Post":             "ENT_SOCIAL",
+    "Twitter - Browsing Feed":           "ENT_SOCIAL",
+    "Twitter - Composing":               "ENT_SOCIAL",
+    "LinkedIn - Browsing":               "ENT_SOCIAL",
+    "LinkedIn - Job Hunting":            "ENT_SOCIAL",
+    "Medium - Reading":                  "ENT_SOCIAL",
     
     # Shopping
-    "Shopping - E-commerce":            "SHOP_ONLINE",
-    "Shopping - Amazon":                "SHOP_ONLINE",
-    "Shopping - eBay":                  "SHOP_ONLINE",
+    "Amazon - Product Browsing":         "SHOP_ONLINE",
+    "Amazon - Checkout":                 "SHOP_ONLINE",
+    "Amazon - Searching":                "SHOP_ONLINE",
+    "Amazon - Order Tracking":           "SHOP_ONLINE",
     
     # Financial
-    "Financial - Banking":              "FIN_BANKING",
-    "Financial - Trading":              "FIN_BANKING",
+    "TradingView - Market Analysis":     "FIN_BANKING",
+    "Binance - Trading":                 "FIN_BANKING",
+    "Binance - Portfolio Review":         "FIN_BANKING",
     
     # System
-    "System - File Management":         "SYS_FILE",
-    "System - File Explorer":           "SYS_FILE",
-    "System - Command Line":            "SYS_TERMINAL",
-    "System - Terminal":                "SYS_TERMINAL",
-    "System - PowerShell":              "SYS_TERMINAL",
-    "System - Configuration":           "SYS_CONFIG",
-    "System - Task Manager":            "SYS_CONFIG",
-    "System - Windows Settings":        "SYS_CONFIG",
+    "File Explorer - Browsing Files":    "SYS_FILE",
+    "File Explorer - Copying Files":     "SYS_FILE",
+    "File Explorer - Searching":         "SYS_FILE",
+    "Terminal - Git Operations":          "SYS_TERMINAL",
+    "Terminal - Package Installation":    "SYS_TERMINAL",
+    "Terminal - Script Execution":        "SYS_TERMINAL",
+    "Terminal - Python Script Execution": "SYS_TERMINAL",
+    "Terminal - Compilation":             "SYS_TERMINAL",
+    "Terminal - Command Line":            "SYS_TERMINAL",
+    "Terminal - SSH Connection":          "SYS_TERMINAL",
+    "Terminal - Docker Management":       "SYS_TERMINAL",
+    "Terminal - System Management":       "SYS_TERMINAL",
+    "Terminal - File Navigation":         "SYS_TERMINAL",
+    "Terminal - Remote Server":           "SYS_TERMINAL",
+    "Terminal - Container Management":    "SYS_TERMINAL",
+    "Task Manager - Performance Monitoring": "SYS_CONFIG",
+    "Settings - System Configuration":   "SYS_CONFIG",
     
     # Creative
-    "Creative - Design":                "CR_DESIGN",
-    "Creative - Photoshop":             "CR_DESIGN",
-    "Creative - Figma":                 "CR_DESIGN",
-    "Creative - Video Editing":          "CR_VIDEO",
-    "Creative - Premiere Pro":          "CR_VIDEO",
-    "Creative - DaVinci Resolve":       "CR_VIDEO",
+    "Figma - UI Design":                 "CR_DESIGN",
+    "Figma - Prototyping":               "CR_DESIGN",
+    "Canva - Designing":                 "CR_DESIGN",
+    "Photoshop - Photo Editing":         "CR_DESIGN",
+    "Blender - 3D Modeling":             "CR_DESIGN",
+    "Premiere Pro - Video Editing":      "CR_VIDEO",
+    "DaVinci Resolve - Video Editing":   "CR_VIDEO",
+    "DaVinci Resolve - Color Grading":   "CR_VIDEO",
+    "After Effects - Motion Graphics":   "CR_VIDEO",
+    "Audacity - Audio Editing":          "CR_AUDIO",
+    "FL Studio - Beat Making":           "CR_AUDIO",
     
     # Idle
-    "Idle - Away":                      "IDLE_AWAY",
-    "Idle - System Idle":               "IDLE_AWAY",
-    "Idle - Away From Keyboard":        "IDLE_AWAY",
-    "Idle - Screen Locked":             "IDLE_AWAY",
-    "Idle - Passive Viewing":           "IDLE_PASSIVE",
-    "Passive - Watching":               "IDLE_PASSIVE",
+    "Idle - Away from Keyboard":         "IDLE_AWAY",
+    "Idle - Screen Locked":              "IDLE_AWAY",
+    "Idle - Screensaver":                "IDLE_AWAY",
+    "Passive - Watching":                "IDLE_PASSIVE",
+    "Passive - Listening":               "IDLE_PASSIVE",
+    "Thinking - Paused":                 "IDLE_PASSIVE",
 }
 
 def get_content_type_code(label: str) -> str:
