@@ -954,7 +954,34 @@ class WindowsAPI:
             'source': 'window_api'
         }
 
-        # Check process name
+        # 1. Determine if the current process is a known browser.
+        # Browsers act as hosts for websites, which carry the actual intent.
+        is_browser = False
+        browser_category, browser_emoji = None, None
+        
+        for browser_key in ["chrome", "firefox", "edge", "msedge", "opera", "brave", "safari", "chromium", "waterfox", "tor", "vivaldi"]:
+            if browser_key in process:
+                is_browser = True
+                browser_category, browser_emoji = self.APP_CATEGORIES.get(browser_key, ("WEB BROWSING", "🌐"))
+                break
+                
+        if is_browser:
+            # For browsers, the title contains the website which dictates the activity.
+            for site_key, (category, emoji) in self.WEBSITE_CATEGORIES.items():
+                if site_key in title:
+                    result['category'] = category
+                    result['emoji'] = emoji
+                    result['confidence'] = 'High'
+                    self._last_valid_result = result.copy()
+                    return result
+            # If no specific website matched, return the generic browser category
+            result['category'] = browser_category
+            result['emoji'] = browser_emoji
+            result['confidence'] = 'Very High'
+            self._last_valid_result = result.copy()
+            return result
+
+        # 2. For non-browsers, prioritize the executable process name
         for app_key, (category, emoji) in self.APP_CATEGORIES.items():
             if app_key in process:
                 result['category'] = category
@@ -963,7 +990,7 @@ class WindowsAPI:
                 self._last_valid_result = result.copy()
                 return result
 
-        # Check window title for websites
+        # 3. Fallback: check window title against websites (e.g. if process name was hidden or empty)
         for site_key, (category, emoji) in self.WEBSITE_CATEGORIES.items():
             if site_key in title:
                 result['category'] = category
@@ -972,12 +999,13 @@ class WindowsAPI:
                 self._last_valid_result = result.copy()
                 return result
 
-        # Check title against app categories
+        # 4. Fallback: check window title against app categories using word boundaries.
         for app_key, (category, emoji) in self.APP_CATEGORIES.items():
-            if app_key in title:
+            # word boundary match to prevent "profiles" matching "files"
+            if re.search(r'\b' + re.escape(app_key) + r'\b', title):
                 result['category'] = category
                 result['emoji'] = emoji
-                result['confidence'] = 'High'
+                result['confidence'] = 'Medium'
                 self._last_valid_result = result.copy()
                 return result
 

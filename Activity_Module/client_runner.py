@@ -58,6 +58,9 @@ def _classify_youtube(video_title: str) -> str:
     vt = video_title.lower()
 
     # YouTube-specific pages (not watching a video)
+    if not vt or vt in ("youtube", "youtube.com", "home", "home - youtube"):
+        return "YouTube - Browsing"
+
     if any(k in vt for k in ["search results", "subscriptions", "trending",
                               "watch later", "history", "library",
                               "liked videos", "your videos"]):
@@ -329,7 +332,7 @@ def _classify_local(title: str):
                     break
 
             # If only "youtube" or empty, user is on homepage
-            if not video_title or video_title.lower() in ("youtube", ""):
+            if not video_title or video_title.lower() in ("youtube", "youtube.com", "home"):
                 return "YouTube - Browsing"
 
             return _classify_youtube(video_title)

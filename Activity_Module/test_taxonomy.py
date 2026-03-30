@@ -49,6 +49,8 @@ def run_all_tests():
     test_scenario("VS Code Building", "code.exe", "Terminal - Building - Visual Studio Code")
     
     # 2. Browser Scenarios (YouTube)
+    test_scenario("YouTube Browsing", "chrome.exe", "YouTube", "youtube.com")
+    test_scenario("YouTube Search", "chrome.exe", "search results - YouTube", "youtube.com")
     test_scenario("YouTube Video", "chrome.exe", "Python Tutorial for Beginners - YouTube", "youtube.com")
     test_scenario("YouTube Music", "chrome.exe", "Official Music Video - YouTube", "youtube.com")
     test_scenario("YouTube Shorts", "chrome.exe", "Crazy Experiment #shorts - YouTube", "youtube.com")

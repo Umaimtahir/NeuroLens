@@ -528,7 +528,9 @@ def classify_browser_tab(
             return "YouTube - Music"
         if any(k in t for k in ["@", "podcast", "tutorial", "course", "lecture", "how to", "learn"]):
             return "YouTube - Tutorial"
-        if any(k in t for k in ["youtube", "youtube.com", "my channel", "subscriptions", "search", "results", "channel", "subscribe"]):
+        if t in ["youtube", "youtube.com", "home", "home - youtube"]:
+            return "YouTube - Browsing"
+        if any(k in t for k in ["my channel", "subscriptions", "search", "results", "channel", "subscribe"]):
             return "YouTube - Browsing"
         return "YouTube - Video"
 
@@ -639,7 +641,7 @@ def classify_browser_tab(
         if "search" in t or "list" in t:
             return "arXiv - Searching Papers"
         return "arXiv - Reading Paper"
-    if any(d in t for d in _RESEARCH_DOMAINS):
+    if any(d in t for d in _RESEARCH_KEYWORDS):
         return "arXiv - Reading Paper"
 
     # ── Learning Platforms ───────────────────────────────────────────────
