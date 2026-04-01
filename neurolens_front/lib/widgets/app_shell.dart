@@ -13,7 +13,7 @@ import '../screens/login_screen.dart';
 import '../widgets/notification_widgets.dart';
 import '../utils/constants.dart';
 
-class AppShell extends StatelessWidget {
+class AppShell extends StatefulWidget {
   final Widget body;
   final String currentRoute;
 
@@ -24,12 +24,103 @@ class AppShell extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<AppShell> {
+  AnalysisProvider? _analysisProvider;
+  bool _isRecommendationDialogVisible = false;
+  String? _lastShownRecommendationSignature;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final provider = Provider.of<AnalysisProvider>(context, listen: false);
+
+    if (_analysisProvider != provider) {
+      _analysisProvider = provider;
+      _analysisProvider?.onRecommendationReceived = _showGlobalRecommendationDialog;
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_analysisProvider != null) {
+      _analysisProvider!.onRecommendationReceived = null;
+    }
+    super.dispose();
+  }
+
+  void _showGlobalRecommendationDialog(Map<String, dynamic> payload) {
+    if (!mounted || _isRecommendationDialogVisible) return;
+
+    final recommendations = List<Map<String, dynamic>>.from(
+      payload['recommendations'] ?? [],
+    );
+
+    if (recommendations.isEmpty) return;
+
+    final triggerEmotion = (payload['trigger_emotion'] ?? 'neutral').toString();
+    final triggerReason = (payload['trigger_reason'] ?? '').toString();
+    final firstTitle = (recommendations.first['title'] ?? '').toString();
+    final signature = '$triggerEmotion|$triggerReason|$firstTitle';
+
+    if (_lastShownRecommendationSignature == signature) return;
+
+    _lastShownRecommendationSignature = signature;
+    _isRecommendationDialogVisible = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        _isRecommendationDialogVisible = false;
+        return;
+      }
+
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Wellness Recommendation'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Detected state: ${triggerEmotion.toUpperCase()}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              if (triggerReason.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(triggerReason),
+              ],
+              const SizedBox(height: 12),
+              ...recommendations.take(2).map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('• ${item['title'] ?? 'Recommendation available'}'),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      ).whenComplete(() {
+        _isRecommendationDialogVisible = false;
+      });
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<AnalysisProvider>(
       builder: (context, analysisProvider, _) {
         return Scaffold(
           appBar: AppBar(
-            title: Text(currentRoute),
+            title: Text(widget.currentRoute),
             actions: [
               NotificationBell(
                 unreadCount: analysisProvider.unreadNotificationCount,
@@ -38,7 +129,7 @@ class AppShell extends StatelessWidget {
             ],
           ),
           drawer: _buildDrawer(context),
-          body: body,
+          body: widget.body,
         );
       },
     );
@@ -200,7 +291,7 @@ class AppShell extends StatelessWidget {
       VoidCallback onTap, {
         Color? color,
       }) {
-    final isSelected = currentRoute == title;
+    final isSelected = widget.currentRoute == title;
     return ListTile(
       leading: Icon(icon, color: color ?? (isSelected ? AppConstants.primaryTeal : null)),
       title: Text(
@@ -221,7 +312,7 @@ class AppShell extends StatelessWidget {
     Navigator.pop(context);
 
     // Don't navigate if already on the same screen
-    if (screen.runtimeType.toString().contains(currentRoute)) {
+    if (screen.runtimeType.toString().contains(widget.currentRoute)) {
       return;
     }
 
