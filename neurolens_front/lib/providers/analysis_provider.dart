@@ -12,6 +12,7 @@ import 'package:http/http.dart' as http;
 class AnalysisProvider with ChangeNotifier {
   final ApiService _apiService = ApiService();
   final NotificationService _notificationService = NotificationService();
+  static const Duration _analysisInterval = Duration(seconds: 1);
 
   EmotionModel? _currentEmotion;
   ContentModel? _currentContent;
@@ -87,8 +88,8 @@ class AnalysisProvider with ChangeNotifier {
     
     notifyListeners();
 
-    // ✅ Capture and send frames every 2 seconds (30 frames per minute) - balanced for performance
-    _analysisTimer = Timer.periodic(const Duration(seconds: 2), (timer) async {
+    // Faster capture cadence improves perceived real-time emotion changes.
+    _analysisTimer = Timer.periodic(_analysisInterval, (timer) async {
       // Skip if previous request is still processing
       if (_isProcessingFrame) {
         print('⏳ Skipping frame - previous request still processing');
@@ -202,9 +203,10 @@ class AnalysisProvider with ChangeNotifier {
           _contentHistory.removeAt(0);
         }
 
-        await _fetchRecommendationsIfDue();
-
         notifyListeners();
+
+        // Keep recommendations async so emotion updates are not delayed.
+        unawaited(_fetchRecommendationsIfDue());
       } catch (e) {
         print('❌ Error analyzing frame: $e');
       } finally {
