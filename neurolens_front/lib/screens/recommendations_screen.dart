@@ -15,6 +15,7 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
   
   List<Map<String, dynamic>> _recommendations = [];
   Map<String, bool> _completedItems = {};
+  bool _hasShownInitialRecommendationPopup = false;
   String? _triggerEmotion;
   String? _triggerReason;
   Map<String, dynamic>? _emotionSummary;
@@ -46,6 +47,11 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
           _emotionSummary = response['emotion_summary'];
           _isLoading = false;
         });
+
+        if (!_hasShownInitialRecommendationPopup && _recommendations.isNotEmpty) {
+          _hasShownInitialRecommendationPopup = true;
+          _showRecommendationsPopup();
+        }
       }
     } catch (e) {
       print('❌ Failed to load recommendations: $e');
@@ -98,6 +104,10 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
           _triggerEmotion = response['trigger_emotion'];
           _triggerReason = response['trigger_reason'];
         });
+
+        if (_recommendations.isNotEmpty) {
+          _showRecommendationsPopup();
+        }
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -114,6 +124,51 @@ class _RecommendationsScreenState extends State<RecommendationsScreen> {
         ),
       );
     }
+  }
+
+  void _showRecommendationsPopup() {
+    if (!mounted) return;
+
+    final topRecommendations = _recommendations.take(2).toList();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('New Recommendations'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_triggerEmotion != null)
+                Text(
+                  'Detected state: ${_triggerEmotion!.toUpperCase()}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              if (_triggerReason != null) ...[
+                const SizedBox(height: 8),
+                Text(_triggerReason!),
+              ],
+              const SizedBox(height: 12),
+              ...topRecommendations.map(
+                (rec) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('• ${rec['title'] ?? 'Recommendation available'}'),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   @override

@@ -27,9 +27,12 @@ class AnalysisProvider with ChangeNotifier {
   bool _multipleFacesDetected = false;
   int _detectedFaceCount = 0;
   String? _multipleFacesError;
+  DateTime? _lastRecommendationFetchAt;
+  String? _lastRecommendationSignature;
   
   // Callback for showing error popup (set by UI)
   Function(String message, int faceCount)? onMultipleFacesDetected;
+  Function(Map<String, dynamic> payload)? onRecommendationReceived;
 
   EmotionModel? get currentEmotion => _currentEmotion;
   ContentModel? get currentContent => _currentContent;
@@ -199,6 +202,8 @@ class AnalysisProvider with ChangeNotifier {
           _contentHistory.removeAt(0);
         }
 
+        await _fetchRecommendationsIfDue();
+
         notifyListeners();
       } catch (e) {
         print('❌ Error analyzing frame: $e');
@@ -206,6 +211,49 @@ class AnalysisProvider with ChangeNotifier {
         _isProcessingFrame = false;  // Unlock - allow next frame
       }
     });
+  }
+
+  Future<void> _fetchRecommendationsIfDue() async {
+    final now = DateTime.now();
+
+    if (_lastRecommendationFetchAt != null &&
+        now.difference(_lastRecommendationFetchAt!) < const Duration(seconds: 30)) {
+      return;
+    }
+
+    _lastRecommendationFetchAt = now;
+
+    try {
+      final response = await _apiService.get('/api/recommendations');
+      final recommendations = List<Map<String, dynamic>>.from(
+        response['recommendations'] ?? [],
+      );
+
+      if (recommendations.isEmpty) {
+        return;
+      }
+
+      final triggerEmotion = (response['trigger_emotion'] ?? 'neutral').toString();
+      final triggerReason = (response['trigger_reason'] ?? '').toString();
+      final firstTitle = (recommendations.first['title'] ?? '').toString();
+      final signature = '$triggerEmotion|$triggerReason|$firstTitle';
+
+      if (signature == _lastRecommendationSignature) {
+        return;
+      }
+
+      _lastRecommendationSignature = signature;
+
+      if (onRecommendationReceived != null) {
+        onRecommendationReceived!({
+          'recommendations': recommendations,
+          'trigger_emotion': response['trigger_emotion'],
+          'trigger_reason': response['trigger_reason'],
+        });
+      }
+    } catch (e) {
+      print('⚠️ Failed to fetch recommendations for global popup: $e');
+    }
   }
 
   /// Send frame to backend API with multipart form data
@@ -260,6 +308,7 @@ class AnalysisProvider with ChangeNotifier {
     _analysisTimer?.cancel();
     _analysisTimer = null;
     _cameraController = null;  // Don't dispose, just clear reference
+    _lastRecommendationFetchAt = null;
     
     // ✅ Notify backend that recording stopped
     try {
@@ -289,6 +338,7 @@ class AnalysisProvider with ChangeNotifier {
     _contentHistory.clear();
     _currentEmotion = null;
     _currentContent = null;
+    _lastRecommendationSignature = null;
     notifyListeners();
   }
   
