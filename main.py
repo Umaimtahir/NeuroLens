@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, R
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
+import uuid
 import random
 import json
 import logging
@@ -697,9 +698,11 @@ def login(credentials: UserLogin, request: Request, db: Session = Depends(get_db
 def guest_login():
     """Guest mode - no signup required, limited features"""
     
-    guest_id = f"guest_{datetime.now().timestamp()}"
+    # Use a negative integer space for guests so they never collide with real user IDs.
+    guest_user_id = -((uuid.uuid4().int % 2_000_000_000) + 1)
+    guest_id = f"guest_{abs(guest_user_id)}"
     token = create_access_token(
-        data={"sub": guest_id, "is_guest": True},
+        data={"sub": guest_id, "guest_id": guest_id, "user_id": guest_user_id, "is_guest": True},
         expires_delta=timedelta(hours=24)
     )
     
@@ -708,7 +711,7 @@ def guest_login():
     return LoginResponse(
         token=token,
         user=UserResponse(
-            id=0,
+            id=guest_user_id,
             name="Guest User",
             email="guest@neurolens.app",
             username=guest_id
@@ -720,12 +723,13 @@ def guest_login():
 def get_me(current_user: User = Depends(get_current_user)):
     """Get current user"""
     # Handle guest users
-    if current_user.id == 0 or not current_user.email_encrypted:
+    if getattr(current_user, 'is_guest', False) or current_user.id == 0 or not current_user.email_encrypted:
+        guest_username = getattr(current_user, 'username', 'guest')
         return UserResponse(
-            id=0,
+            id=current_user.id,
             name="Guest User",
             email="guest@neurolens.app",
-            username="guest"
+            username=guest_username
         )
     
     return UserResponse(
@@ -899,11 +903,12 @@ def get_profile(
     
     is_guest = getattr(current_user, 'is_guest', False)
     if is_guest or current_user.id == 0:
+        guest_username = getattr(current_user, 'username', 'guest')
         return {
-            "id": 0,
+            "id": current_user.id,
             "name": "Guest User",
             "email": "guest@neurolens.app",
-            "username": "guest",
+            "username": guest_username,
             "is_guest": True
         }
     

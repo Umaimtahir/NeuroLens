@@ -33,8 +33,16 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: str = payload.get("sub")
-        user_id: int = payload.get("user_id")  # New: get user_id from token
+        user_id_raw = payload.get("user_id")  # May be absent for older tokens
         is_guest: bool = payload.get("is_guest", False)
+        guest_id: str = payload.get("guest_id")
+
+        user_id: Optional[int] = None
+        if user_id_raw is not None:
+            try:
+                user_id = int(user_id_raw)
+            except (TypeError, ValueError):
+                raise credentials_exception
         
         if username is None:
             raise credentials_exception
@@ -43,15 +51,23 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         if is_guest:
             # Return a mock user for guest
             from models import User as UserModel
+
+            # Backward compatibility for old guest tokens that had no user_id.
+            guest_user_id = user_id if user_id is not None else 0
+            guest_username = guest_id or username or "guest"
+
             guest_user = UserModel(
-                id=0,
+                id=guest_user_id,
                 name="Guest User",
                 email_encrypted="",
+                email_hash="",
                 username_hash="",
                 username_encrypted="",
                 password_hash="",
                 is_active=True
             )
+            guest_user.is_guest = True
+            guest_user.username = guest_username
             return guest_user
         
     except JWTError:
